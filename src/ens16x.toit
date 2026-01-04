@@ -419,12 +419,12 @@ class Ens16x:
     with every read from a register in the range 0x20 to 0x37, using a CRC
     polynomial (POLY).  In testing it appears that this register is updated for
     every read to the device, regardless of 8 or 16 bit, all except for the MISR
-    register itself.  The $register-read_ function has been modified to call this
-    function such that for every register read, the function $misr-update-sw_ is
-    called, for each individual byte read.  This keeps the internal variable
-    $misr_ in sync with the hardware register.  Comparing the Hardware and
-    Software CRC checks allows one to determine if any data reads have become
-    corrupt.
+    register itself.  The $read-register_ function has been modified to call
+    this function such that for every register read, the function
+    $misr-update-software_ is called, for each individual byte read.  This keeps
+    the internal variable $misr_ in sync with the hardware register.  Comparing
+    the Hardware and Software CRC checks allows one to determine if any data
+    reads have become corrupt.
   */
   misr-update-software_ data/int -> none:
     assert: 0 <= data <= 255
