@@ -439,8 +439,9 @@ class Ens16x:
   /**
   Returns the hardware's rolling CRC counter.
 
-  Function uses a direct read so as to prevent an infinite loop where the
-    MISR register read triggers a MISR register read for comparing the CRC's, etc.
+  Function uses a direct read so as to prevent an 'infinite loop'. (Where the
+    MISR register read triggers a MISR register read for comparing the CRC's,
+    and so on.)
   */
   misr-hardware_ -> int:
     return (reg_.read-bytes REG-DATA-MISR_ 1)[0]
@@ -467,29 +468,20 @@ class Ens16x:
     misr_ = misr-hardware_
 
   /*
-  GPR-WRITE and GPR-READ are described only as access to general purpose
-    registers.
+  Raw int16 read of the $reg general purpose registers.
 
-  No register map is provided for the GPR space.  No functional behavior is tied
-    to them (no documented effect on modes, measurements, calibration, or
-    outputs). No example transactions or workflows reference them.  They are
-    not mentioned in the context of normal operation, production firmware, or
-    host compensation.  These placeholders are left here for now.
-
-  gpr-read_ -> ByteArray:
-    out := ByteArray 8
-    8.repeat:
-      out[it] = read-register_ (REG-GPR-READ-BASE_ + it)
-    return out
-
-  // For writes, $OPMODE-IDLE is required.
-  gpr-write_ -> ByteArray:
-    assert: get-operating-mode == OPMODE-IDLE
-    out := ByteArray 8
-    8.repeat:
-      out[it] = read-register_ (REG-GPR-READ-BASE_ + it)
-    return out
+  ENS160 specifies Sensor 1 as R1, and sensor 4 as R4.  ENS161 specifies Sensor
+    4 as R3, but this is the same as R4.  To avoid confusion, input to this
+    function is the sensor number.
   */
+  gpr-read-raw-int16_ sensor/int -> int:
+    assert: 1 <= sensor <= 4
+    if sensor == 2 or sensor == 3:
+      logger_.warn "sensor not available according to datasheet" --tags={"sensor":sensor,"hw-id":hw-id_}
+    else if sensor == 1 and hw-id_ != ENS160-HW-ID_:
+      logger_.warn "sensor not available according to datasheet" --tags={"sensor":sensor,"hw-id":hw-id_}
+    reg := sensor - 1
+    return read-register_ (REG-GPR-READ-BASE_ + (reg * 2)) --width=16
 
   /**
   Reads and optionally masks/parses register data.

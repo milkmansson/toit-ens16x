@@ -55,25 +55,32 @@ Note that this value on its own is not an air quality measurement.  Please see
 the [ENS161 Datasheet](https://www.sciosense.com/wp-content/uploads/2024/12/ENS161-Datasheet.pdf)
 
 ### Specific Compounds
-By exposing a register for reading a specific element, readings for specific
-chemicals can be made using calibration to that gas. These are exposed using
-specific functions in the driver:
-| Target Gas | Range | Unit | Driver function |
-| - | - | - | - |
-| Ethanol | 0..450 | ppm | `.read-etoh` |
-| Hydrogen | 0..1000 | ppm | `.read-etoh` |
-| Acetone | 0..450 | ppm | `.read-etoh` |
-| Carbon Monoxide | 0..900 | ppm | `.read-etoh` |
-| Toluene | 0..450 | ppm | `.read-etoh` |
+The datasheet shows that by exposing a register for reading a specific element, readings for specific chemicals can be made using calibration for that gas.
+
+While these channels are described in terms of individual target gases (for
+example acetone, ethanol, or hydrogen) they do not represent direct or
+calibrated concentration measurements.  Each raw channel is influenced by the
+mixture of gases in the air, as well as by temperature, humidity, sensor aging,
+and cross-sensitivity effects.  ScioSense does not provide a universal or
+sensor-independent formula to convert these raw values into ppm or mg/m3, and
+any such conversion requires empirical calibration against known reference
+concentrations for the specific sensor and environment of the intended use case.
+
+For this reason, this driver currently does not expose convenience functions
+that claim to return absolute concentrations for individual gases based on raw
+channels.  It does however expose a raw read function `.gpr-read-raw-int16_` for
+the sensor such that the user can obtain the value and do the required math.
+Similar to the `.is-data-ready` function, the `.is-gpr-data-ready` function can
+be used to assert when new GPR data is ready.  (See Usage below.)
 
 ## Usage
 > [!TIP]
 > The Hardware/Software guide says "... it's important to be aware that
 > frequently toggling between active operating modes is not advisable.  If the
 > operating mode is changed and after idle periods, it is advisable to wait for
-> the warm-up time in order to ensure adequate sensor stability. Typically,
-> it´s recommendable to wait up to 3 minutes in standard mode and up to 60
-> minutes in the other cases.
+> the warm-up time in order to ensure adequate sensor stability.  Warm up is
+> given as 3 minutes in standard mode [ENS160] (and 5..60 minutes if using
+> low-power modes [ENS161]).
 
 The driver logs information it finds at startup, and enforces the interim change
 to IDLE when changing to another operating mode.  However, this may not be
@@ -83,24 +90,25 @@ information.
 ### Initial Startup
 > [!WARNING]
 > The datasheet states that an initial 1 hour warm up period is required when
-> first being used, and 'Only once in the sensor's lifetime.'  However, even
-> when this initial warm up period is complete, this status will only be stored
-> in the devices non-volatile memory **after** an initial 24h period of
-> continuous operation.  If unpowered before the conclusion of this 24h period,
-> the ENS160 will resume "Initial Start-up" mode again after powering on again.
+> first being used (or 3..24 hours in low power modes in the ENS161), and 'Only
+> once in the sensor's lifetime.'  However, even when this initial warm up
+> period is complete, this status will only be stored in the devices
+> non-volatile memory **after** an initial 24h period of continuous operation.
+> If unpowered before the conclusion of this 24h period, the ENS160 will resume
+> "Initial Start-up" mode again after powering on again.
 
 ### Examples
 See the [examples](./examples/) folder for examples of the driver in use, and
 additional information against functions in the Toitdocs alongside the driver code.
 
-### Single Gas Evaluation
-(todo)
+### Raw resistance values (for single gas calibration)
+An example as shown below.  The Datasheet shows that the ENS160 exposes two
+registers, whereas the ENS161 has just one.  (The error case of using of the
+additional ENS160 sensor against the ENS161 is logged, but not guarded against.):
+```
+R4 is register 3
 
-
-
-### Raw Resistance Values
-(todo)
-
+```
 
 ## Links
 - [ENS160 Datasheet](https://www.sciosense.com/wp-content/uploads/2023/12/ENS160-Datasheet.pdf)
