@@ -1,0 +1,39 @@
+## For more: https://github.com/github/gitignore
+
+## Toit 
+.packages/
+.jaguar
+
+# Refernce Information
+.reference/
+
+# Backups
+.backup/
+.backups/
+
+## IDEs
+# VS Code
+.vscode/
+# Eclipse
+.project
+.classpath
+.settings/
+
+## OS Junk 
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+# Linux
+*~
+.nfs*
+
+## Environment & Secrets
+.env
+.env.*
+
