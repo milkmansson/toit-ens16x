@@ -9,7 +9,7 @@ import ens16x show *
 import bme280
 
 /**
-Example of ENS160 operation.
+Example of ENS160 operation via I2C.
 
 Purposes:
   Take the temperature from a BME280, supply it for ENS160 calibration.

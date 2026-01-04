@@ -68,10 +68,10 @@ concentrations for the specific sensor and environment of the intended use case.
 
 For this reason, this driver currently does not expose convenience functions
 that claim to return absolute concentrations for individual gases based on raw
-channels.  It does however expose a raw read function `.gpr-read-raw-int16_` for
+channels.  It does however expose a raw read function `.read-gpr-raw-int16` for
 the sensor such that the user can obtain the value and do the required math.
 Similar to the `.is-data-ready` function, the `.is-gpr-data-ready` function can
-be used to assert when new GPR data is ready.  (See Usage below.)
+be used to assert when new GPR data is ready.  (See examples information below.)
 
 ## Usage
 > [!TIP]
@@ -103,17 +103,15 @@ additional information against functions in the Toitdocs alongside the driver co
 
 ### Raw resistance values (for single gas calibration)
 An example as shown below.  The Datasheet shows that the ENS160 exposes two
-registers, whereas the ENS161 has just one.  (The error case of using of the
-additional ENS160 sensor against the ENS161 is logged, but not guarded against.):
-```
-R4 is register 3
-
-```
+registers, whereas the ENS161 has just one.  (The error case of reading the
+additional ENS160 sensor #1 with the ENS161 is logged, but not guarded against.)
+See the [`raw-read.toit`](./examples/raw-read.toit) example.
 
 ## Links
 - [ENS160 Datasheet](https://www.sciosense.com/wp-content/uploads/2023/12/ENS160-Datasheet.pdf)
 - [ENS161 Datasheet](https://www.sciosense.com/wp-content/uploads/2024/12/ENS161-Datasheet.pdf)
 - [ENS161 Hardware/Software Guidelines](https://www.sciosense.com/wp-content/uploads/2024/09/ENS161-Application-Note-Hardware-and-Software-Guidelines.pdf)
+- [ScioSense ENS16x Arduino Driver](https://github.com/sciosense/ens16x-arduino/tree/main)
 
 ## Issues
 If there are any issues, changes, or any other kind of feedback, please

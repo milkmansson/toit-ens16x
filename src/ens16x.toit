@@ -95,11 +95,11 @@ class Ens16x:
   static WIDTH-16_ ::= 16
   static DEFAULT-REGISTER-WIDTH_ ::= WIDTH-8_
 
-  static ENS160-HW-ID_ ::= 0x160
-  static ENS161-HW-ID_ ::= 0x161
+  static ENS160-HW-ID ::= 0x160
+  static ENS161-HW-ID ::= 0x161
   static HW-IDS_ ::= {
-    ENS160-HW-ID_: "ENS160",
-    ENS161-HW-ID_: "ENS161"}
+    ENS160-HW-ID: "ENS160",
+    ENS161-HW-ID: "ENS161"}
 
   // Class-wide variables:
   hw-id_/int := 0
@@ -168,7 +168,7 @@ class Ens16x:
           cmd-no-op_
           cmd-clear-gpr_
           cmd-get-appver_
-          while not is-gpr-ready:
+          while not is-gpr-data-ready:
             sleep --ms=25
           out-bytes[0] = read-register_ (REG-GPR-READ-BASE_ + 4)
           out-bytes[1] = read-register_ (REG-GPR-READ-BASE_ + 5)
@@ -176,7 +176,7 @@ class Ens16x:
           if current-op-mode != OPMODE-IDLE: set-operating-mode current-op-mode
 
     if exception:
-      logger_.error "get-firmware-version - wait for is-gpr-ready timed out" --tags={"duration":duration.in-ms}
+      logger_.error "get-firmware-version - wait for is-gpr-data-ready timed out" --tags={"duration":duration.in-ms}
     else:
       // logger_.info "get-firmware-version" --tags={"duration":duration.in-ms}
 
@@ -348,7 +348,7 @@ class Ens16x:
 
   Cleared automatically when any GPR-x register is read.
   */
-  is-gpr-ready -> bool:
+  is-gpr-data-ready -> bool:
     return (read-register_ REG-STATUS_ --mask=STATUS-NEW-GPR-MASK_) == 1
 
   /**
@@ -383,7 +383,7 @@ class Ens16x:
 
   /** Returns the SocioScense air quality index rate of change. [0-100]. */
   read-aqi-s -> int:
-    if hw-id_ != ENS161-HW-ID_:
+    if not (model-is ENS161-HW-ID):
       logger_.error "aqi-s not available on ENS160"
       return 0
     return read-register_ REG-DATA-AQI-S_ --width=WIDTH-16_
@@ -467,6 +467,9 @@ class Ens16x:
   misr-resync_ -> none:
     misr_ = misr-hardware_
 
+  model-is model/int -> bool:
+    return hw-id_ == model
+
   /*
   Raw int16 read of the $reg general purpose registers.
 
@@ -474,12 +477,12 @@ class Ens16x:
     4 as R3, but this is the same as R4.  To avoid confusion, input to this
     function is the sensor number.
   */
-  gpr-read-raw-int16_ sensor/int -> int:
+  read-gpr-raw-int16 sensor/int -> int:
     assert: 1 <= sensor <= 4
     if sensor == 2 or sensor == 3:
-      logger_.warn "sensor not available according to datasheet" --tags={"sensor":sensor,"hw-id":hw-id_}
-    else if sensor == 1 and hw-id_ != ENS160-HW-ID_:
-      logger_.warn "sensor not available according to datasheet" --tags={"sensor":sensor,"hw-id":hw-id_}
+      logger_.warn "sensor not available according to datasheet" --tags={"sensor":sensor,"hw-id":"0x$(%02x hw-id_)"}
+    else if sensor == 1 and model-is ENS161-HW-ID:
+      logger_.warn "sensor not available according to datasheet" --tags={"sensor":sensor,"hw-id":"0x$(%02x hw-id_)"}
     reg := sensor - 1
     return read-register_ (REG-GPR-READ-BASE_ + (reg * 2)) --width=16
 
