@@ -194,12 +194,6 @@ class Ens16x:
     write-register_ REG-CMD_ CMD-NOP_
 
   /**
-  Returns the current operating mode.
-  */
-  get-operating-mode -> int:
-    return read-register_ REG-OPMODE_
-
-  /**
   Resets the device.
 
   Optionally supply $mode to set the device to this mode after reset.
@@ -255,6 +249,12 @@ class Ens16x:
       logger_.info "set opmode duration" --tags={"mode": OPMODES_[mode],"duration":duration.in-ms}
 
   /**
+  Returns the current operating mode.
+  */
+  get-operating-mode -> int:
+    return read-register_ REG-OPMODE_
+
+  /**
   Set a custom temperature used for calculations.
 
   This function allows the user to write ambient temperature (in celsius ) to
@@ -262,17 +262,12 @@ class Ens16x:
     to null to remove the configured temperature.
   */
   set-compensation-temp celsius/float? -> none:
-    //current-mode := get-operating-mode
-    //if current-mode != OPMODE-IDLE:
-    //  set-operating-mode OPMODE-IDLE
     if not celsius:
       write-register_ REG-TEMP-IN_ 0 --width=WIDTH-16_
       return
     kelvin/float := celsius + 273.15
     raw/int := (kelvin * 64.0).to-int
     write-register_ REG-TEMP-IN_ (kelvin * 64.0).to-int --width=WIDTH-16_
-    //if current-mode != OPMODE-IDLE:
-    //  set-operating-mode current-mode
 
   /**
   Get the custom temperature set for calculations.
@@ -283,6 +278,16 @@ class Ens16x:
     raw := read-register_ REG-TEMP-IN_ --width=WIDTH-16_
     if raw == 0: return null
     return (raw.to-float / 64.0) - 273.15
+
+  /**
+  Whether a custom temperature is set for calculation calibration.
+
+  See $set-compensation-temp.
+  */
+  is-compensation-temp-set -> bool:
+    raw := read-register_ REG-TEMP-IN_ --width=WIDTH-16_
+    if raw == 0: return false
+    return true
 
   /**
   Set the humidity used for calculations.
@@ -297,7 +302,6 @@ class Ens16x:
       return
     write-register_ REG-RH-IN_ (rh * 512).to-int --width=WIDTH-16_
 
-
   /**
   Get the custom humidity used for calculations.
 
@@ -307,6 +311,16 @@ class Ens16x:
     raw := read-register_ REG-RH-IN_ --width=WIDTH-16_
     if raw == 0: return null
     return raw / 512.0
+
+  /**
+  Whether a custom humidity is set for calculation calibration.
+
+  See $set-compensation-humidity.
+  */
+  is-compensation-humidity-set -> bool:
+    raw := read-register_ REG-RH-IN_ --width=WIDTH-16_
+    if raw == 0: return false
+    return true
 
   /** Whether an OPMODE is running. */
   is-opmode-running -> bool:
@@ -332,7 +346,7 @@ class Ens16x:
   /**
   Whether new data is available in the GPR-x registers.
 
-  Cleared automatically at first GPR-x read.
+  Cleared automatically when any GPR-x register is read.
   */
   is-gpr-ready -> bool:
     return (read-register_ REG-STATUS_ --mask=STATUS-NEW-GPR-MASK_) == 1
@@ -351,26 +365,35 @@ class Ens16x:
   data-validity -> int:
     return read-register_ REG-STATUS_ --mask=STATUS-OUTPUT-VALID-MASK_
 
-  /**
-  Shortcut accessor to $data-validity == $OUTPUT-NORMAL_. */
+  /** Shortcut accessor to $data-validity == $OUTPUT-NORMAL_. */
   is-data-valid -> bool:
     return (read-register_ REG-STATUS_ --mask=STATUS-OUTPUT-VALID-MASK_) == OUTPUT-NORMAL_
 
-
+  /** Returns the Air Quality Index [1..5] as per UBA guidelines. */
   read-aqi-uba -> int:
     return read-register_ REG-DATA-AQI-UBA_ --mask=AQI-UBA-MASK_
 
+  /** Returns the total volatile organic compounds (ppb). */
   read-tvoc -> int:
     return read-register_ REG-DATA-TVOC_ --width=WIDTH-16_
 
-  read-etoh -> int:
-    return read-register_ REG-DATA-ETOH_ --width=WIDTH-16_
-
+  /** Returns the equivalent CO2 (ppm). */
   read-eco2 -> int:
     return read-register_ REG-DATA-ECO2_ --width=WIDTH-16_
 
+  /** Returns the SocioScense air quality index rate of change. [0-100]. */
   read-aqi-s -> int:
+    if hw-id_ != ENS161-HW-ID_:
+      logger_.error "aqi-s not available on ENS160"
+      return 0
     return read-register_ REG-DATA-AQI-S_ --width=WIDTH-16_
+
+  // Derived measures.
+
+  /** Returns the equivalent ethanol (ppm) value. */
+  read-etoh -> int:
+    return read-register_ REG-DATA-ETOH_ --width=WIDTH-16_
+
 
   /**
   Get the temperature used in calculations (celsius ).

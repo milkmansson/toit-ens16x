@@ -62,33 +62,33 @@ main:
     ens160-driver.set-compensation-temp bme280-driver.read-temperature
     ens160-driver.set-compensation-humidity bme280-driver.read-humidity
 
-  compensation-temp := ""
-  // For testing purposes, examine the values in the status register
-  if ens160-driver.get-compensation-temp:
-    compensation-temp = "$(%0.2f (ens160-driver.get-compensation-temp)) c"
-  else:
-    compensation-temp = "<Not Set>"
-
+  // Variables.
+  start := Time.monotonic-us
+  width := 10
   compensation-humidity := ""
-  // For testing purposes, examine the values in the status register
-  if ens160-driver.get-compensation-humidity:
-    compensation-humidity = "$(%0.2f ens160-driver.get-compensation-humidity) %rh"
+
+  // For testing purposes, examine the values in the status register, and
+  // report whether they are set.
+  if ens160-driver.is-compensation-temp-set:
+    logger.info "Manually set compensation temperature: $(%0.2f (ens160-driver.get-compensation-temp)) c"
   else:
-    compensation-humidity = "<Not Set>"
+    logger.info "Manually set compensation temperature: <not-set>"
+
+  // For testing purposes, examine the values in the status register, and
+  // report whether they are set.
+  if ens160-driver.is-compensation-humidity-set:
+    logger.info "Manually set compensation Humidity: $(%0.2f ens160-driver.get-compensation-humidity) %rh"
+  else:
+    logger.info "Manually set compensation Humidity: <not-set>"
 
   // Sleep 1 sec (ENS160 STANDARD opmode updates at 1Hz)
   sleep --ms=1000
 
-  logger.info "Manually set compensation temperature: $compensation-temp"
-  logger.info "Manually set compensation Humidity: $compensation-humidity"
-  logger.info "Current compensation temperature: $(%0.2f ens160-driver.get-temp)"
-  logger.info "Current compensation Humidity: $(%0.2f ens160-driver.get-humidity)"
+  logger.info "Current compensation temperature: $(%0.2f ens160-driver.get-temp) c"
+  logger.info "Current compensation Humidity: $(%0.2f ens160-driver.get-humidity) %rh"
   logger.info "Current eCO2: $ens160-driver.read-eco2"
   logger.info "Current TVOC: $ens160-driver.read-tvoc"
   logger.info "Current AQI(UBA): $ens160-driver.read-aqi-uba"
-
-  start := Time.monotonic-us
-  width := 10
 
   while true:
     elapsed-time := Duration --us=(Time.monotonic-us - start)

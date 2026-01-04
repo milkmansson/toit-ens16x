@@ -1,8 +1,12 @@
 # Toit driver for the ScioSense ENS160 & ENS161 I2C/SPI Air Quality Sensors
-
+Toit driver for ENS160/ENS161 Air Quality Sensor.  This IC is found on common
+modules (such as [this one] from DFRobot).  The device does not have its own
+temperature/humidity sensor, so is also found on modules combined with a sensor
+such as the ASAIR AHT21 temperature/humidity sensor.
 
 ## Air Quality Characteristics Detected
-The ScioSense datasheet has excellent explanations of these terms:
+The ScioSense datasheet has excellent explanations of what it detects:
+
 ### TVOCs - 'Total Volatile Organic Compounds'
 More than 5000 VOCs exist, and they are two to five times more likely to be
 found indoors than outdoors. Indoor VOCs are various types of hydrocarbons from
@@ -50,22 +54,52 @@ quality of the past 24 hours.
 Note that this value on its own is not an air quality measurement.  Please see
 the [ENS161 Datasheet](https://www.sciosense.com/wp-content/uploads/2024/12/ENS161-Datasheet.pdf)
 
+### Specific Compounds
 
 
 
 
 
+## Usage
+> [!TIP]
+> The Hardware/Software guide says "... it's important to be aware that
+> frequently toggling between active operating modes is not advisable.  If the
+> operating mode is changed and after idle periods, it is advisable to wait for
+> the warm-up time in order to ensure adequate sensor stability. Typically,
+> it´s recommendable to wait up to 3 minutes in standard mode and up to 60
+> minutes in the other cases.
+
+The driver logs information it finds at startup, and enforces the interim change
+to IDLE when changing to another operating mode.  However, this may not be
+enough in all specific circumstances.  See the Datasheet and Guides for more
+information.
+
+### Initial Startup
+> [!WARNING]
+> The datasheet states that an initial 1 hour warm up period is required when
+> first being used, and 'Only once in the sensor's lifetime.'  However, even
+> when this initial warm up period is complete, this status will only be stored
+> in the devices non-volatile memory **after** an initial 24h period of
+> continuous operation.  If unpowered before the conclusion of this 24h period,
+> the ENS160 will resume "Initial Start-up" mode again after powering on again.
+
+### Examples
+See the [examples](./examples/) folder for examples of the driver in use, and
+additional information against functions in the Toitdocs alongside the driver code.
+
+### Single Gas Evaluation
+(todo)
 
 
 
-
-
-
+### Raw Resistance Values
+(todo)
 
 
 ## Links
 - [ENS160 Datasheet](https://www.sciosense.com/wp-content/uploads/2023/12/ENS160-Datasheet.pdf)
 - [ENS161 Datasheet](https://www.sciosense.com/wp-content/uploads/2024/12/ENS161-Datasheet.pdf)
+- [ENS161 Hardware/Software Guidelines](https://www.sciosense.com/wp-content/uploads/2024/09/ENS161-Application-Note-Hardware-and-Software-Guidelines.pdf)
 
 ## Issues
 If there are any issues, changes, or any other kind of feedback, please
