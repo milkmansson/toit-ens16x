@@ -31,7 +31,7 @@ class Ens16x:
   static REG-DATA-MISR_ ::= 0x38  // 1 R Data Integrity Field (optional)
 
   static REG-GPR-WRITE-BASE_ ::= 0x40  // 0x40..0x47: General Purpose Write Registers
-  static REG-GPR-READ-BASE_  ::= 0x48  // 0x48..0x55: General Purpose Read Registers
+  static REG-GPR-READ-BASE_  ::= 0x48  // 0x48..0x4F: General Purpose Read Registers
 
   // REG-REG-OPMODE_: Configuration of Operating Modes.
   static OPMODE-DEEPSLEEP     ::= 0x00 // DEEP SLEEP mode (low-power standby)
@@ -132,6 +132,7 @@ class Ens16x:
     // Report if device is not ready to go.
     data-valid := data-validity
     if data-valid == OUTPUT-INIT-START-UP_:
+      // Not used/returned on ENS161, but safe to leave this way.
       logger_.warn "device still in 1 hour first power on period"
     else if data-valid == OUTPUT-WARM-UP_:
       logger_.warn "device still in 3 minute warmup period"
@@ -262,12 +263,12 @@ class Ens16x:
     to null to remove the configured temperature.
   */
   set-compensation-temp celsius/float? -> none:
-    if not celsius:
+    if celsius == null:
       write-register_ REG-TEMP-IN_ 0 --width=WIDTH-16_
       return
     kelvin/float := celsius + 273.15
-    raw/int := (kelvin * 64.0).to-int
-    write-register_ REG-TEMP-IN_ (kelvin * 64.0).to-int --width=WIDTH-16_
+    raw/int := (kelvin * 64.0).round.to-int
+    write-register_ REG-TEMP-IN_ raw --width=WIDTH-16_
 
   /**
   Get the custom temperature set for calculations.
@@ -297,20 +298,21 @@ class Ens16x:
     to null to remove the configured humidity value.
   */
   set-compensation-humidity rh/float? -> none:
-    if not rh:
+    if rh == null:
       write-register_ REG-RH-IN_ 0 --width=WIDTH-16_
       return
-    write-register_ REG-RH-IN_ (rh * 512).to-int --width=WIDTH-16_
+    raw := (rh * 512).round.to-int
+    write-register_ REG-RH-IN_ raw --width=WIDTH-16_
 
   /**
   Get the custom humidity used for calculations.
 
-  See $set-compensation-humidity.  Set to 0 to remove.
+  See $set-compensation-humidity.
   */
   get-compensation-humidity -> float?:
     raw := read-register_ REG-RH-IN_ --width=WIDTH-16_
     if raw == 0: return null
-    return raw / 512.0
+    return raw.to-float / 512.0
 
   /**
   Whether a custom humidity is set for calculation calibration.
