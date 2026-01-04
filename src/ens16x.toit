@@ -120,7 +120,7 @@ class Ens16x:
     // Check Correct HW ID:
     hw-id_ = get-hardware-id
     if not HW-IDS_.contains hw-id_:
-      logger_.error "HW ID unsupported" --tags={"hw-id":"0x$(%02x hw-id_)"}
+      logger_.error "HW ID unsupported" --tags={"hw-id":"0x$(%03x hw-id_)"}
       throw "Incorrect HW ID"
 
     // Reset device, returning to OPMODE-IDLE.
