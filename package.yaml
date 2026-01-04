@@ -1,0 +1,4 @@
+name: ens16x
+description: A driver for the ENS160 and ENS161 digital multi-gas sensors.
+environment:
+  sdk: ^2.0.0-alpha.188
