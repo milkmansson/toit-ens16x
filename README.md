@@ -5,7 +5,8 @@ temperature/humidity sensor, so is also found on modules combined with a sensor
 such as the ASAIR AHT21 temperature/humidity sensor.
 
 ## Air Quality Characteristics Detected
-The ScioSense datasheet has excellent explanations of what it detects:
+The ScioSense datasheet has excellent explanations of what it detects (snippets
+taken from the datasheets):
 
 ### TVOCs - 'Total Volatile Organic Compounds'
 More than 5000 VOCs exist, and they are two to five times more likely to be
@@ -55,7 +56,8 @@ Note that this value on its own is not an air quality measurement.  Please see
 the [ENS161 Datasheet](https://www.sciosense.com/wp-content/uploads/2024/12/ENS161-Datasheet.pdf)
 
 ### Specific Compounds
-The datasheet shows that by exposing a register for reading a specific element, readings for specific chemicals can be made using calibration for that gas.
+The datasheet shows that by exposing a register for reading a specific element,
+readings for specific chemicals can be made using calibration for that gas.
 
 While these channels are described in terms of individual target gases (for
 example acetone, ethanol, or hydrogen) they do not represent direct or
@@ -105,7 +107,7 @@ additional information against functions in the Toitdocs alongside the driver co
 An example as shown below.  The Datasheet shows that the ENS160 exposes two
 registers, whereas the ENS161 has just one.  (The error case of reading the
 additional ENS160 sensor #1 with the ENS161 is logged, but not guarded against.)
-See the [`raw-read.toit`](./examples/raw-read.toit) example.
+See the [`read-raw.toit`](./examples/read-raw.toit) example.
 
 ## Links
 - [ENS160 Datasheet](https://www.sciosense.com/wp-content/uploads/2023/12/ENS160-Datasheet.pdf)
