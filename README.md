@@ -55,10 +55,16 @@ Note that this value on its own is not an air quality measurement.  Please see
 the [ENS161 Datasheet](https://www.sciosense.com/wp-content/uploads/2024/12/ENS161-Datasheet.pdf)
 
 ### Specific Compounds
-
-
-
-
+By exposing a register for reading a specific element, readings for specific
+chemicals can be made using calibration to that gas. These are exposed using
+specific functions in the driver:
+| Target Gas | Range | Unit | Driver function |
+| - | - | - | - |
+| Ethanol | 0..450 | ppm | `.read-etoh` |
+| Hydrogen | 0..1000 | ppm | `.read-etoh` |
+| Acetone | 0..450 | ppm | `.read-etoh` |
+| Carbon Monoxide | 0..900 | ppm | `.read-etoh` |
+| Toluene | 0..450 | ppm | `.read-etoh` |
 
 ## Usage
 > [!TIP]

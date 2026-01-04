@@ -388,15 +388,8 @@ class Ens16x:
       return 0
     return read-register_ REG-DATA-AQI-S_ --width=WIDTH-16_
 
-  // Derived measures.
-
-  /** Returns the equivalent ethanol (ppm) value. */
-  read-etoh -> int:
-    return read-register_ REG-DATA-ETOH_ --width=WIDTH-16_
-
-
   /**
-  Get the temperature used in calculations (celsius ).
+  Get the temperature used in calculations (degrees celsius).
 
   Temp is taken from $set-compensation-temp, if supplied.
   */
@@ -413,11 +406,25 @@ class Ens16x:
     raw := read-register_ REG-DATA-RH_ --width=WIDTH-16_
     return raw.to-float / 512.0
 
-  /*
-  The hardware register $REG-DATA-MISR_ is updated with every read from a
-  register in the range 0x20 to 0x37, using a CRC polynomial (POLY).  In every
-  register read, the function $misr-update-sw_ is called on each individual byte
-  to keep the internal variable $misr_ in sync with the hardware register.
+  // Derived measures.
+
+  /** Returns the equivalent ethanol (ppm) value. */
+  read-etoh -> int:
+    return read-register_ REG-DATA-ETOH_ --width=WIDTH-16_
+
+  /**
+  Updates the software's instance of the rolling CRC counter.
+
+  The documentation says that the hardware register $REG-DATA-MISR_ is updated
+    with every read from a register in the range 0x20 to 0x37, using a CRC
+    polynomial (POLY).  In testing it appears that this register is updated for
+    every read to the device, regardless of 8 or 16 bit, all except for the MISR
+    register itself.  The $register-read_ function has been modified to call this
+    function such that for every register read, the function $misr-update-sw_ is
+    called, for each individual byte read.  This keeps the internal variable
+    $misr_ in sync with the hardware register.  Comparing the Hardware and
+    Software CRC checks allows one to determine if any data reads have become
+    corrupt.
   */
   misr-update-software_ data/int -> none:
     assert: 0 <= data <= 255
@@ -429,22 +436,32 @@ class Ens16x:
       misr_ = misr-xor ^ MISR-POLY_
     //logger_.debug "misr-update-sw" --tags={"begin":"0x$(%02x start)","data":"0x$(%02x data)","result":"0x$(%02x misr_)"}
 
+  /**
+  Returns the hardware's rolling CRC counter.
+
+  Function uses a direct read so as to prevent an infinite loop where the
+    MISR register read triggers a MISR register read for comparing the CRC's, etc.
+  */
   misr-hardware_ -> int:
     return (reg_.read-bytes REG-DATA-MISR_ 1)[0]
-    //return read-register_ REG-DATA-MISR_
 
-  /*
-  Typically, when an I2C/SPI transaction is completed, read $REG-DATA-MISR_,
-    and compare it with the software $misr_. They should equal. If not there
-    is a CRC error: one or more bytes were corrupted in the transfer.
+  /**
+  Whether the Hardware MISR and Software MISR are equal - eg, that no
+    data read corruptions have occurred.
+
+  When a data read transaction is completed, read $REG-DATA-MISR_, and compare
+    it with the software $misr_. They should equal. If not there is a CRC error:
+    one or more bytes were corrupted in the transfer.
   */
   misr-valid_ -> bool:
     return misr_ == misr-hardware_
 
-  /*
+  /**
+  Resets the Software MISR value.
+
   Once the CRC is wrong, or transactions have been executed without calling
-    update() the software `misr` is out of sync with DATA-MISR.  Read DATA-MISR
-    and call `misr_set()` to bring back in sync.
+    update() the software `misr` is out of sync with DATA-MISR.  This reads
+    REG-DATA-MISR_ and stores in $misr_ to bring back in sync.
   */
   misr-resync_ -> none:
     misr_ = misr-hardware_
