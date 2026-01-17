@@ -596,9 +596,9 @@ class Ens16x:
     if ((width == 8)  and (mask == 0xFF)  and (offset == 0)) or
       ((width == 16) and (mask == 0xFFFF) and (offset == 0)):
       if width == 8:
-        signed ? reg_.write-i8 register (value & 0xFF) : reg_.write-u8 register (value & 0xFF)
+        signed ? reg_.write-i8 register value : reg_.write-u8 register value
       else:
-        signed ? reg_.write-i16-le register (value & 0xFFFF) : reg_.write-u16-le register (value & 0xFFFF)
+        signed ? reg_.write-i16-le register value : reg_.write-u16-le register value
       return
 
     // Read Reg for modification
