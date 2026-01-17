@@ -116,8 +116,12 @@ See the [`read-raw.toit`](./examples/read-raw.toit) example.
 - [ScioSense ENS16x Arduino Driver](https://github.com/sciosense/ens16x-arduino/tree/main)
 
 ## Issues
-If there are any issues, changes, or any other kind of feedback, please
-[raise an issue](./issues). Feedback is welcome and appreciated!
+If there are any issues with this code, changes, or any other kind of feedback,
+please [raise an issue](./issues). Feedback is welcome and appreciated!  There
+are evidently many cheap clones of this device floating about, with varying
+results.  Links to interesting articles on this:
+- [help is my ens160_aht21 board broken](https://www.reddit.com/r/Esphome/comments/1h9hk4j/help_is_my_ens160_aht21_board_broken/)
+- 
 
 ## Disclaimer
 - This driver has been written and tested with DFRobot module pictured.

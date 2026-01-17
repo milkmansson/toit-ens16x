@@ -44,8 +44,8 @@ class Ens16x:
     OPMODE-DEEPSLEEP: "OPMODE-DEEPSLEEP",
     OPMODE-IDLE: "OPMODE-IDLE",
     OPMODE-STANDARD: "OPMODE-STANDARD",
-    OPMODE-LOWPOWER: "OPMODE-LOWPOWER",
-    OPMODE-ULT-LOWPOWER: "OPMODE-ULT-LOWPOWER",
+    OPMODE-LOWPOWER: "OPMODE-LOWPOWER",          // ENS161 only.
+    OPMODE-ULT-LOWPOWER: "OPMODE-ULT-LOWPOWER",  // ENS161 only.
     OPMODE-RESET: "OPMODE-RESET"}
 
   // REG-REG-CONFIG_: Interrupt Pin Operation.
@@ -70,7 +70,7 @@ class Ens16x:
   // REG-STATUS_: data-validity masks:
   static OUTPUT-NORMAL_         ::= 0b00  // OUTPUT is valid
   static OUTPUT-WARM-UP_        ::= 0b01  // OUTPUT is valid but WARMUP (?)
-  static OUTPUT-INIT-START-UP_  ::= 0b10
+  static OUTPUT-INIT-START-UP_  ::= 0b10  // ENS160 Only.
   static OUTPUT-INVALID_        ::= 0b11
 
   // REG-DATA-AQI-UBA_ & REG-DATA-AQI-S_: Read masks.
@@ -89,8 +89,11 @@ class Ens16x:
   static MSIR-IGNORE-REGISTERS ::= {
     REG-PART-ID_,
     REG-DATA-MISR_ }
+
+  // Software tracking of CRC value (updated by $misr-update-software_).
   misr_/int := 0
 
+  // $write-register_ statics for bit width.  All 16 bit read/writes are LE.
   static WIDTH-8_ ::= 8
   static WIDTH-16_ ::= 16
   static DEFAULT-REGISTER-WIDTH_ ::= WIDTH-8_
@@ -102,7 +105,7 @@ class Ens16x:
     ENS161-HW-ID: "ENS161"}
 
   // Class-wide variables:
-  hw-id_/int := 0
+  hw-id_/int := 0             // Track detected HW version for function use.
   reg_/registers.Registers := ?
   logger_/log.Logger := ?
 
@@ -117,11 +120,13 @@ class Ens16x:
     // Check Correct HW ID:
     hw-id_ = get-hardware-id
     if not HW-IDS_.contains hw-id_:
-      logger_.error "HW ID unsupported" --tags={"hw-id":"0x$(%02x hw-id_)"}
+      logger_.error "HW ID unsupported" --tags={"hw-id":"0x$(%03x hw-id_)"}
       throw "Incorrect HW ID"
 
-    // Reset MSIR
+    // Reset device, returning to OPMODE-IDLE.
     reset OPMODE-IDLE
+
+    // Reset SW MSIR value as device reset will zero the HW value.
     misr-resync_
 
     // Report device type deteceted and firmware.
@@ -140,11 +145,12 @@ class Ens16x:
       logger_.error "device reports invalid"
       throw "device reports invalid"
 
+    // Set to operating mode as given to the constructor.
     set-operating-mode startup-operating-mode
     logger_.info "currently in operating mode" --tags={"opmode":OPMODES_[get-operating-mode]}
 
     if is-error:
-      logger_.error "currently in ERROR condition" // --tags={"opmode":OPMODES_[get-operating-mode]}
+      logger_.error "currently in ERROR condition"
 
   /**
   Returns the value of the HARDWARE-ID register.
@@ -158,7 +164,7 @@ class Ens16x:
   /* Function will not answer unless in mode $OPMODE-IDLE. */
   get-firmware-version -> List:
     current-op-mode := get-operating-mode
-    out-bytes := [0x00, 0x01, 0x02]
+    out-bytes := [0x00, 0x00, 0x00]
 
     // Poll to determine if data is ready
     duration := Duration.ZERO
@@ -178,13 +184,12 @@ class Ens16x:
 
     if exception:
       logger_.error "get-firmware-version - wait for is-gpr-data-ready timed out" --tags={"duration":duration.in-ms}
-    else:
-      // logger_.info "get-firmware-version" --tags={"duration":duration.in-ms}
 
     return out-bytes
 
   cmd-get-appver_ -> none:
     write-register_ REG-CMD_ CMD-GET-APPVER_
+    // Remove timed wait in favour of checking against $is-gpr-data-ready.
     //sleep TIMING-CLEAR-GPR_
 
   cmd-clear-gpr_ -> none:
@@ -192,12 +197,15 @@ class Ens16x:
     sleep TIMING-CLEAR-GPR_
 
   cmd-no-op_ -> none:
+    // Don't know why we do this, however is done in ScioSense's examples.
     write-register_ REG-CMD_ CMD-NOP_
 
   /**
   Resets the device.
 
-  Optionally supply $mode to set the device to this mode after reset.
+  A normal reset would put the device into $OPMODE-DEEPSLEEP.  This function
+    defaults to $OPMODE-IDLE unless $mode is optional supplied - if set, a
+    the $mode will be set after the reset command is given.
   */
   reset mode/int=OPMODE-IDLE -> none:
     set-operating-mode OPMODE-RESET
@@ -415,17 +423,17 @@ class Ens16x:
     return read-register_ REG-DATA-ETOH_ --width=WIDTH-16_
 
   /**
-  Updates the software's instance of the rolling CRC counter.
+  Updates the software instance of the rolling CRC counter.
 
   The documentation says that the hardware register $REG-DATA-MISR_ is updated
     with every read from a register in the range 0x20 to 0x37, using a CRC
     polynomial (POLY).  In testing it appears that this register is updated for
-    every read to the device, regardless of 8 or 16 bit, all except for the MISR
-    register itself.  The $read-register_ function has been modified to call
-    this function such that for every register read, the function
-    $misr-update-software_ is called, for each individual byte read.  This keeps
-    the internal variable $misr_ in sync with the hardware register.  Comparing
-    the Hardware and Software CRC checks allows one to determine if any data
+    every read from the device, regardless of 8 or 16 bit, all except for the
+    MISR register itself.  The $read-register_ function has been modified to
+    call this function such that for every register read, the function
+    $misr-update-software_ is called once for each individual byte read.  This
+    keeps the internal variable $misr_ in sync with the hardware register.
+    Comparing the Hardware and Software CRC allows one to determine if any data
     reads have become corrupt.
   */
   misr-update-software_ data/int -> none:
@@ -462,9 +470,12 @@ class Ens16x:
   /**
   Resets the Software MISR value.
 
-  Once the CRC is wrong, or transactions have been executed without calling
-    update() the software `misr` is out of sync with DATA-MISR.  This reads
-    REG-DATA-MISR_ and stores in $misr_ to bring back in sync.
+  Once the CRC is wrong (or read transactions have been executed without calling
+    $misr-update-software_) the software MISR will be out of sync with
+    $REG-DATA-MISR_.  Because the CRC uses the previous value in the calculation
+    it remains out of sync and every read will appear to be a failure.  This
+    function reads REG-DATA-MISR_ and stores in $misr_ to bring the two values
+    back in sync.
   */
   misr-resync_ -> none:
     misr_ = misr-hardware_
@@ -475,9 +486,11 @@ class Ens16x:
   /*
   Raw int16 read of the $reg general purpose registers.
 
-  ENS160 specifies Sensor 1 as R1, and sensor 4 as R4.  ENS161 specifies Sensor
-    4 as R3, but this is the same as R4.  To avoid confusion, input to this
-    function is the sensor number.
+  ENS160 datasheet specifies 'Sensor' 1 as R1, and 'Sensor 4' as R4.  The ENS161
+    datasheet specifies 'Sensor 4' as R3 - however, the bits and registers are
+    the same as R4 in the ENS160 datasheet.  To avoid confusion, input to this
+    function is the sensor number instead of the Rx value given in the
+    datasheets.
   */
   read-gpr-raw-int16 sensor/int -> int:
     assert: 1 <= sensor <= 4
@@ -491,7 +504,11 @@ class Ens16x:
   /**
   Reads and optionally masks/parses register data.
 
-  Little Endian Only. Updates software MISR checksum value (See Datasheet).
+  Little Endian Only. This version checks and updates software MISR checksum
+    value (See $misr-update-software_ toitdocs and MISR information in the
+    Datasheet).  Do do this, the *-le functions have been switched to
+    .read-bytes, to allow the software CRC to be run against each individual
+    byte as required in the datasheet.
   */
   read-register_
       register/int
@@ -554,7 +571,9 @@ class Ens16x:
       return masked-value
 
   /**
-  Writes register data - either masked or full register writes. (Little Endian Only.)
+  Writes register data - either masked or full register writes.
+
+  Little Endian Only.  No modifications are required or made to support MISR.
   */
   write-register_
       register/int
@@ -576,11 +595,10 @@ class Ens16x:
     // Full-width direct write
     if ((width == 8)  and (mask == 0xFF)  and (offset == 0)) or
       ((width == 16) and (mask == 0xFFFF) and (offset == 0)):
-      //logger_.debug "full width write" --tags={"register":"0x$(%02x register)", "value":"0x$(%02x value)"}
       if width == 8:
-        signed ? reg_.write-i8 register (value & 0xFF) : reg_.write-u8 register (value & 0xFF)
+        signed ? reg_.write-i8 register value : reg_.write-u8 register value
       else:
-        signed ? reg_.write-i16-le register (value & 0xFFFF) : reg_.write-u16-le register (value & 0xFFFF)
+        signed ? reg_.write-i16-le register value : reg_.write-u16-le register value
       return
 
     // Read Reg for modification
@@ -601,7 +619,6 @@ class Ens16x:
       throw "write-register_ read failed"
 
     new-value/int := (old-value & ~mask) | ((value & field-mask) << offset)
-
     if width == 8:
       signed ? reg_.write-i8 register new-value : reg_.write-u8 register new-value
       return
