@@ -109,6 +109,14 @@ registers, whereas the ENS161 has just one.  (The error case of reading the
 additional ENS160 sensor #1 with the ENS161 is logged, but not guarded against.)
 See the [`read-raw.toit`](./examples/read-raw.toit) example.
 
+### Use with the ASAIR AHT21 combo module
+The ENS160 can be configured with a temperature and humidity compensation values
+to ensure accuracy of measurements.
+
+
+
+
+
 ## Links
 - [ENS160 Datasheet](https://www.sciosense.com/wp-content/uploads/2023/12/ENS160-Datasheet.pdf)
 - [ENS161 Datasheet](https://www.sciosense.com/wp-content/uploads/2024/12/ENS161-Datasheet.pdf)
@@ -121,7 +129,7 @@ please [raise an issue](./issues). Feedback is welcome and appreciated!  There
 are evidently many cheap clones of this device floating about, with varying
 results.  Links to interesting articles on this:
 - [help is my ens160_aht21 board broken](https://www.reddit.com/r/Esphome/comments/1h9hk4j/help_is_my_ens160_aht21_board_broken/)
-- 
+-
 
 ## Disclaimer
 - This driver has been written and tested with DFRobot module pictured.

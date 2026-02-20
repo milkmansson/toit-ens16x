@@ -552,6 +552,9 @@ class Ens16x:
     the same as R4 in the ENS160 datasheet.  To avoid confusion, input to this
     function is the sensor number instead of the Rx value given in the
     datasheets.
+
+  This function does not call the private `update-if-necessary_` function that
+    update the temperature and humidity compensation values via the callbacks.
   */
   read-gpr-raw-int16 sensor/int -> int:
     assert: 1 <= sensor <= 4
