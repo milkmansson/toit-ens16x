@@ -307,8 +307,9 @@ class Ens16x:
 
   set-compensation-temp-callback callback/Lambda? -> none:
     temp-comp-callback_ = callback
-    set-compensation-temp callback.call
-    temp-comp-callback-ts_ = Time.monotonic-us
+    if temp-comp-callback_:
+      set-compensation-temp temp-comp-callback_.call
+      temp-comp-callback-ts_ = Time.monotonic-us
 
   /**
   Set the humidity used for calculations.
@@ -346,8 +347,17 @@ class Ens16x:
 
   set-compensation-humidity-callback callback/Lambda? -> none:
     humidity-comp-callback_ = callback
-    set-compensation-humidity callback.call
-    humidity-comp-callback-ts_ = Time.monotonic-us
+    if humidity-comp-callback_:
+      set-compensation-humidity humidity-comp-callback_.call
+      humidity-comp-callback-ts_ = Time.monotonic-us
+
+  update-if-necessary_ -> none:
+    if humidity-comp-callback_ and Time.monotonic-us >= (humidity-comp-callback-ts_ + callback-ttl_.in-us):
+      set-compensation-humidity humidity-comp-callback_.call
+      humidity-comp-callback-ts_ = Time.monotonic-us
+    if temp-comp-callback_ and Time.monotonic-us >= (temp-comp-callback-ts_ + callback-ttl_.in-us):
+      set-compensation-temp temp-comp-callback_.call
+      temp-comp-callback-ts_ = Time.monotonic-us
 
   /** Whether an OPMODE is running. */
   is-opmode-running -> bool:
@@ -398,18 +408,22 @@ class Ens16x:
 
   /** Returns the Air Quality Index [1..5] as per UBA guidelines. */
   read-aqi-uba -> int:
+    update-if-necessary_
     return read-register_ REG-DATA-AQI-UBA_ --mask=AQI-UBA-MASK_
 
   /** Returns the total volatile organic compounds (ppb). */
   read-tvoc -> int:
+    update-if-necessary_
     return read-register_ REG-DATA-TVOC_ --width=WIDTH-16_
 
   /** Returns the equivalent CO2 (ppm). */
   read-eco2 -> int:
+    update-if-necessary_
     return read-register_ REG-DATA-ECO2_ --width=WIDTH-16_
 
   /** Returns the SocioScense air quality index rate of change. [0-100]. */
   read-aqi-s -> int:
+    update-if-necessary_
     if not (model-is ENS161-HW-ID):
       logger_.error "aqi-s not available on ENS160"
       return 0
@@ -437,6 +451,7 @@ class Ens16x:
 
   /** Returns the equivalent ethanol (ppm) value. */
   read-etoh -> int:
+    update-if-necessary_
     return read-register_ REG-DATA-ETOH_ --width=WIDTH-16_
 
   /**
