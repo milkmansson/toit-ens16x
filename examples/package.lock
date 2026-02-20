@@ -1,9 +1,15 @@
 prefixes:
+  aht20_driver: aht20-driver
   bme280: bme280-driver
   ens16x: ..
 packages:
   ..:
     path: ..
+  aht20-driver:
+    url: github.com/davidlao2k/aht20-driver
+    name: aht20_driver
+    version: 1.0.0
+    hash: 5a1b93b3183b0520f4b30522e0c489a0589f7897
   bme280-driver:
     url: github.com/toitware/bme280-driver
     name: bme280
