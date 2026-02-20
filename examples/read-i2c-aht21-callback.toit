@@ -5,7 +5,7 @@
 import gpio
 import i2c
 import log
-import aht2x
+import aht2x show *
 import ens16x show *
 
 /**
@@ -49,19 +49,19 @@ main:
   logger.info "found ENS160" --tags={"address":"0x$(%02x ens16x-i2c-address)"}
 
   // Call/start ENS16x driver.
-  ens160-device := bus.device Ens16x.I2C_ADDRESS
+  ens160-device := bus.device Ens16x.I2C-ADDRESS
   ens160-driver := Ens16x ens160-device --startup-operating-mode=Ens16x.OPMODE-STANDARD --logger=logger
   ens160-driver.set-operating-mode Ens16x.OPMODE-STANDARD
 
   // Test to see if AHT21 present, and if so, make use of it.
   aht21-device := null
   aht21-driver := null
-  if not bus.test aht2x.I2C-ADDRESS:
+  if not bus.test Aht2x.I2C-ADDRESS:
     logger.error "no AHT20 found"
   else:
-    logger.info "found AHT20" --tags={"address":"0x$(%02x aht2x.I2C-ADDRESS)"}
-    aht21-device = bus.device aht2x.I2C-ADDRESS
-    aht21-driver = aht2x.Aht2x aht21-device
+    logger.info "found AHT20" --tags={"address":"0x$(%02x Aht2x.I2C-ADDRESS)"}
+    aht21-device = bus.device Aht2x.I2C-ADDRESS
+    aht21-driver = Aht2x aht21-device
 
     // Set the compensation callback to the functions from the AHT21 driver.
     ens160-driver.set-compensation-temp-callback :: aht21-driver.read-temperature
