@@ -305,6 +305,13 @@ class Ens16x:
     if raw == 0: return false
     return true
 
+  /**
+  Sets the function providing temperature values for compensation.
+
+  Useful for ENS160 modules that have built in AHT21, or where the project also
+    contains a temperature sensor.  Disabled by default.  Set to `null` to
+    disable.
+  */
   set-compensation-temp-callback callback/Lambda? -> none:
     temp-comp-callback_ = callback
     if temp-comp-callback_:
@@ -345,19 +352,38 @@ class Ens16x:
     if raw == 0: return false
     return true
 
+  /**
+  Sets the function providing humidity values for compensation.
+
+  Useful for ENS160 modules that have built in AHT21, or where the project also
+    contains a humidity sensor.  Disabled by default.  Set to `null` to disable.
+  */
   set-compensation-humidity-callback callback/Lambda? -> none:
     humidity-comp-callback_ = callback
     if humidity-comp-callback_:
       set-compensation-humidity humidity-comp-callback_.call
       humidity-comp-callback-ts_ = Time.monotonic-us
 
+  /**
+  Updates the compensation values if it is time to do so.
+  */
   update-if-necessary_ -> none:
-    if humidity-comp-callback_ and Time.monotonic-us >= (humidity-comp-callback-ts_ + callback-ttl_.in-us):
+    is-time-to-do := Time.monotonic-us >= (humidity-comp-callback-ts_ + callback-ttl_.in-us)
+    if humidity-comp-callback_ and is-time-to-do:
       set-compensation-humidity humidity-comp-callback_.call
       humidity-comp-callback-ts_ = Time.monotonic-us
-    if temp-comp-callback_ and Time.monotonic-us >= (temp-comp-callback-ts_ + callback-ttl_.in-us):
+    if temp-comp-callback_ and is-time-to-do:
       set-compensation-temp temp-comp-callback_.call
       temp-comp-callback-ts_ = Time.monotonic-us
+
+  /**
+  Sets the delay between callback sensor reads.
+
+  Relevant only if using set-compensation-humidity-callback or
+    set-compensation-temp-callback.
+  */
+  set-callback-ttl ttl/Duration -> none:
+    callback-ttl_ = ttl
 
   /** Whether an OPMODE is running. */
   is-opmode-running -> bool:
