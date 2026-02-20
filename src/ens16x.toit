@@ -368,7 +368,7 @@ class Ens16x:
   Updates the compensation values if it is time to do so.
   */
   update-if-necessary_ -> none:
-    is-time-to-do := Time.monotonic-us >= (humidity-comp-callback-ts_ + callback-ttl_.in-us)
+    is-time-to-do/bool := Time.monotonic-us >= (humidity-comp-callback-ts_ + callback-ttl_.in-us)
     if humidity-comp-callback_ and is-time-to-do:
       set-compensation-humidity humidity-comp-callback_.call
       humidity-comp-callback-ts_ = Time.monotonic-us
@@ -379,8 +379,11 @@ class Ens16x:
   /**
   Sets the delay between callback sensor reads.
 
-  Relevant only if using set-compensation-humidity-callback or
-    set-compensation-temp-callback.
+  Given that temperature reads from ENS160 in typical scenarios do not typically
+    change frequently or by large changes, this reduces the read load
+    considerably to the temp/humidity sensor, instead of being 1:1 with each
+    individual read instruction.  (Useful only if using
+    set-compensation-humidity-callback or set-compensation-temp-callback.)
   */
   set-callback-ttl ttl/Duration -> none:
     callback-ttl_ = ttl

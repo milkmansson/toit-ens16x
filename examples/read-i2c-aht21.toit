@@ -50,7 +50,7 @@ main:
   ens160-driver := Ens16x ens160-device --startup-operating-mode=Ens16x.OPMODE-STANDARD --logger=logger
   ens160-driver.set-operating-mode Ens16x.OPMODE-STANDARD
 
-  // Test to see if BME280 present.
+  // Test to see if AHT21 present, and if so, make use of it.
   aht21-device := null
   aht21-driver := null
   if not bus.test aht20-driver.I2C-ADDRESS:
