@@ -109,6 +109,13 @@ class Ens16x:
   reg_/registers.Registers := ?
   logger_/log.Logger := ?
 
+  // Lambdas for storing temperature/humidity compensation callbacks, and TTL.
+  temp-comp-callback_/Lambda? := null
+  temp-comp-callback-ts_/int? := null
+  humidity-comp-callback_/Lambda? := null
+  humidity-comp-callback-ts_/int? := null
+  callback-ttl_/Duration := Duration --s=30
+
   constructor
       device/serial.Device
       --startup-operating-mode/int=OPMODE-STANDARD
@@ -298,6 +305,11 @@ class Ens16x:
     if raw == 0: return false
     return true
 
+  set-compensation-temp-callback callback/Lambda? -> none:
+    temp-comp-callback_ = callback
+    set-compensation-temp callback.call
+    temp-comp-callback-ts_ = Time.monotonic-us
+
   /**
   Set the humidity used for calculations.
 
@@ -331,6 +343,11 @@ class Ens16x:
     raw := read-register_ REG-RH-IN_ --width=WIDTH-16_
     if raw == 0: return false
     return true
+
+  set-compensation-humidity-callback callback/Lambda? -> none:
+    humidity-comp-callback_ = callback
+    set-compensation-humidity callback.call
+    humidity-comp-callback-ts_ = Time.monotonic-us
 
   /** Whether an OPMODE is running. */
   is-opmode-running -> bool:
