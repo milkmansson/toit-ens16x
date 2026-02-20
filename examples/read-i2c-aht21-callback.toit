@@ -27,6 +27,9 @@ Purposes:
 
 */
 
+SDA-PIN := 19
+SCL-PIN := 20
+
 main:
   print
   print
@@ -37,16 +40,15 @@ main:
 
   // Enable and drive I2C
   frequency := 400_000
-  sda-pin := gpio.Pin 19
-  scl-pin := gpio.Pin 20
+  sda-pin := gpio.Pin SDA-PIN
+  scl-pin := gpio.Pin SCL-PIN
   bus := i2c.Bus --sda=sda-pin --scl=scl-pin --frequency=frequency
 
   // Test to see if ENS16x present.
-  ens16x-i2c-address := Ens16x.I2C-ADDRESS
-  if not bus.test ens16x-i2c-address:
-    logger.error "no ENS160 found"
+  if not bus.test Ens16x.I2C-ADDRESS:
+    logger.error "no ENS160 found" --tags={"address":"0x$(%02x Ens16x.I2C-ADDRESS)", "SDA": SDA-PIN, "SCL": SCL-PIN}
     return
-  logger.info "found ENS160" --tags={"address":"0x$(%02x ens16x-i2c-address)"}
+  logger.info "found ENS160" --tags={"address":"0x$(%02x Ens16x.I2C-ADDRESS)"}
 
   // Call/start ENS16x driver.
   ens160-device := bus.device Ens16x.I2C-ADDRESS
@@ -57,11 +59,11 @@ main:
   aht21-device := null
   aht21-driver := null
   if not bus.test Aht2x.I2C-ADDRESS:
-    logger.error "no AHT20 found"
+    logger.error "no AHT2x found"
   else:
-    logger.info "found AHT20" --tags={"address":"0x$(%02x Aht2x.I2C-ADDRESS)"}
+    logger.info "found AHT2x" --tags={"address":"0x$(%02x Aht2x.I2C-ADDRESS)"}
     aht21-device = bus.device Aht2x.I2C-ADDRESS
-    aht21-driver = Aht2x aht21-device
+    aht21-driver = Aht2x aht21-device --logger=logger
 
     // Set the compensation callback to the functions from the AHT21 driver.
     ens160-driver.set-compensation-temp-callback :: aht21-driver.read-temperature

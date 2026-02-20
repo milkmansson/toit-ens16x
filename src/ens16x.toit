@@ -368,11 +368,10 @@ class Ens16x:
   Updates the compensation values if it is time to do so.
   */
   update-if-necessary_ -> none:
-    is-time-to-do/bool := Time.monotonic-us >= (humidity-comp-callback-ts_ + callback-ttl_.in-us)
-    if humidity-comp-callback_ and is-time-to-do:
+    if humidity-comp-callback_ and (Time.monotonic-us >= (humidity-comp-callback-ts_ + callback-ttl_.in-us)):
       set-compensation-humidity humidity-comp-callback_.call
       humidity-comp-callback-ts_ = Time.monotonic-us
-    if temp-comp-callback_ and is-time-to-do:
+    if temp-comp-callback_ and (Time.monotonic-us >= (temp-comp-callback-ts_ + callback-ttl_.in-us)):
       set-compensation-temp temp-comp-callback_.call
       temp-comp-callback-ts_ = Time.monotonic-us
 

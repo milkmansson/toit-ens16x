@@ -16,6 +16,9 @@ Purposes:
 
 */
 
+SDA-PIN := 19
+SCL-PIN := 20
+
 main:
   print
   print
@@ -26,15 +29,15 @@ main:
 
   // Enable and drive I2C
   frequency := 400_000
-  sda-pin := gpio.Pin 8
-  scl-pin := gpio.Pin 9
+  sda-pin := gpio.Pin SDA-PIN
+  scl-pin := gpio.Pin SCL-PIN
   bus := i2c.Bus --sda=sda-pin --scl=scl-pin --frequency=frequency
 
   // Test to see if ENS16x present.
-  ens16x-i2c-address := Ens16x.I2C-ADDRESS
-  if not bus.test ens16x-i2c-address:
-    logger.error "no ENS160 found"
+  if not bus.test Ens16x.I2C-ADDRESS:
+    logger.error "no ENS160 found" --tags={"address":"0x$(%02x Ens16x.I2C-ADDRESS)", "SDA": SDA-PIN, "SCL": SCL-PIN}
     return
+  logger.info "found ENS160" --tags={"address":"0x$(%02x Ens16x.I2C-ADDRESS)"}
 
   // Call/start ENS16x driver.
   ens160-device := bus.device Ens16x.I2C_ADDRESS
