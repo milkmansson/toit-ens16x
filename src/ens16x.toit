@@ -86,7 +86,7 @@ class Ens16x:
   // The polynomial used in the CRC computation in REG-DATA-MISR_, 76543210 bit weight factor.
   // 0b00011101 = x^8+x^4+x^3+x^2+x^0 (x^8 is implicit)
   static MISR-POLY_ ::= 0b00011101 // (0x1D)
-  static MSIR-IGNORE-REGISTERS ::= {
+  static MISR-IGNORE-REGISTERS ::= {
     REG-PART-ID_,
     REG-DATA-MISR_ }
 
@@ -133,7 +133,7 @@ class Ens16x:
     // Reset device, returning to OPMODE-IDLE.
     reset OPMODE-IDLE
 
-    // Reset SW MSIR value as device reset will zero the HW value.
+    // Reset SW MISR value as device reset will zero the HW value.
     misr-resync_
 
     // Report device type deteceted and firmware.
@@ -588,11 +588,11 @@ class Ens16x:
     if offset == null:
       offset = mask.count-trailing-zeros
 
-    // Resync - too many registers adjust hardware MSIR value that are not
+    // Resync - too many registers adjust hardware MISR value that are not
     // listed in the documentation.  Therefore reset on every 'interesting'
     // read and ignore otherwise:
     //if MISR-REGISTERS_.contains register:
-    //if not MSIR-IGNORE-REGISTERS.contains register:
+    //if not MISR-IGNORE-REGISTERS.contains register:
     //  misr-resync_
 
     register-value/int? := null
@@ -614,7 +614,7 @@ class Ens16x:
       throw "read-register_ failed."
 
     // If the register is not in the set of ignored registers, do MISR SW update:
-    if not (MSIR-IGNORE-REGISTERS.contains register):
+    if not (MISR-IGNORE-REGISTERS.contains register):
       //logger_.debug "register included in MISR" --tags={"register":"0x$(%02x register)","size":raw.size,"bytes":raw}
       raw.do: | byte |
         misr-update-software_ byte
