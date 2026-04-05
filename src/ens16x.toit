@@ -53,7 +53,7 @@ class Ens16x:
   static CFG-INT-DRIVE-MASK_ ::= 0b00100000 // RW
   static CFG-INT-GPRR-MASK_  ::= 0b00010000 // RW Asserts if new data is in GPRR Registers
   static CFG-INT-DAT-MASK_   ::= 0b00000010 // RW Asserts if new data is in DATA-XXX Registers
-  static CFG-INT-EN-MASK_    ::= 0b00000001 // Asserts if new data is in DATA-XXX Registers
+  static CFG-INT-EN-MASK_    ::= 0b00000001 // Enables the interrupt pin.
 
   // REG-CMD_: Additional Commands.
   static CMD-NOP_        ::= 0x00
@@ -86,7 +86,7 @@ class Ens16x:
   // The polynomial used in the CRC computation in REG-DATA-MISR_, 76543210 bit weight factor.
   // 0b00011101 = x^8+x^4+x^3+x^2+x^0 (x^8 is implicit)
   static MISR-POLY_ ::= 0b00011101 // (0x1D)
-  static MISR-IGNORE-REGISTERS ::= {
+  static MISR-IGNORE-REGISTERS_ ::= {
     REG-PART-ID_,
     REG-DATA-MISR_ }
 
@@ -210,13 +210,29 @@ class Ens16x:
   /**
   Resets the device.
 
-  A normal reset would put the device into $OPMODE-DEEPSLEEP.  This function
-    defaults to $OPMODE-IDLE unless $mode is optional supplied - if set, a
-    the $mode will be set after the reset command is given.
+  A normal reset would put the device into $OPMODE-DEEPSLEEP. This function
+    defaults to $OPMODE-IDLE unless $mode is supplied. After the reset
+    command, this function waits until the device reports no opmode running
+    before proceeding to set the target mode.
   */
   reset mode/int=OPMODE-IDLE -> none:
-    set-operating-mode OPMODE-RESET
+    write-register_ REG-OPMODE_ OPMODE-RESET
     sleep TIMING-RESET_
+
+    // Wait for the device to finish its reset cycle - STATAS should go low.
+    duration := Duration.ZERO
+    exception := catch:
+      with-timeout TIMING-TIMEOUT_:
+        duration = Duration.of:
+          while is-opmode-running:
+            sleep --ms=25
+
+    if exception:
+      logger_.error "reset - device did not clear STATAS after reset" --tags={"duration":duration.in-ms}
+      throw "reset failed"
+    else:
+      logger_.debug "reset completed" --tags={"duration":duration.in-ms}
+
     misr-resync_
     if mode != OPMODE-DEEPSLEEP: set-operating-mode mode
 
@@ -271,11 +287,14 @@ class Ens16x:
     return read-register_ REG-OPMODE_
 
   /**
-  Set a custom temperature used for calculations.
+  Sets the ambient temperature used for compensation (in Celsius).
 
-  This function allows the user to write ambient temperature (in celsius ) to
-    the device for compensation. The register can be written at any time.  Set
-    to null to remove the configured temperature.
+  The register can be written at any time. Set to null to clear the
+    configured value (writes raw 0 to the register).
+
+  Note: A raw register value of 0 is used as the null sentinel. This is
+    safe because 0 maps to 0K (-273.15°C), which is physically impossible
+    and will never be a valid compensation input.
   */
   set-compensation-temp celsius/float? -> none:
     if celsius == null:
@@ -286,9 +305,10 @@ class Ens16x:
     write-register_ REG-TEMP-IN_ raw --width=WIDTH-16_
 
   /**
-  Get the custom temperature set for calculations.
+  Returns the ambient temperature configured for compensation (in Celsius).
 
-  See $set-compensation-temp.  Returns null if not set.
+  Returns null if no compensation temperature has been set. See
+    $set-compensation-temp.
   */
   get-compensation-temp -> float?:
     raw := read-register_ REG-TEMP-IN_ --width=WIDTH-16_
@@ -592,7 +612,7 @@ class Ens16x:
     // listed in the documentation.  Therefore reset on every 'interesting'
     // read and ignore otherwise:
     //if MISR-REGISTERS_.contains register:
-    //if not MISR-IGNORE-REGISTERS.contains register:
+    //if not $MISR-IGNORE-REGISTERS_.contains register:
     //  misr-resync_
 
     register-value/int? := null
@@ -614,7 +634,7 @@ class Ens16x:
       throw "read-register_ failed."
 
     // If the register is not in the set of ignored registers, do MISR SW update:
-    if not (MISR-IGNORE-REGISTERS.contains register):
+    if not (MISR-IGNORE-REGISTERS_.contains register):
       //logger_.debug "register included in MISR" --tags={"register":"0x$(%02x register)","size":raw.size,"bytes":raw}
       raw.do: | byte |
         misr-update-software_ byte
