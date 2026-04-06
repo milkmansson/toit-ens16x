@@ -1,9 +1,12 @@
 prefixes:
+  aht20: aht20
   bme280: bme280-driver
   ens16x: ..
 packages:
   ..:
     path: ..
+  aht20:
+    path: ../../aht20
   bme280-driver:
     url: github.com/toitware/bme280-driver
     name: bme280

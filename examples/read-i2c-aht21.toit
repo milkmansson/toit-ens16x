@@ -5,22 +5,22 @@
 import gpio
 import i2c
 import log
+import aht2x show *
 import ens16x show *
-import bme280
 
 /**
 Example of ENS160 operation via I2C.
 
+(This example uses an AHT2x device.  This example provided in support of the
+popular ENS160/AHT21 combined modules.)
+
 Purposes:
-  Take the temperature from a BME280, supply it for ENS160 calibration.
-  Show readings in a loop:
+  Take the temperature from an AHT21 on the same bus, and supply it for ENS160
+  calibration.  Show readings in a loop:
   - Keep updating ENS160 with temp/humidity from BME280.
   - Show temperature as known by the ENS160.
   - Show elapsed time.
   - Display only when new data is ready.
-
-Code will still run if BME280 not present.  ENS160 will simply return its
-  default values for temperature and humidity calibration.
 
 */
 
@@ -52,17 +52,17 @@ main:
   ens160-driver := Ens16x ens160-device --startup-operating-mode=Ens16x.OPMODE-STANDARD --logger=logger
   ens160-driver.set-operating-mode Ens16x.OPMODE-STANDARD
 
-  // Test to see if BME280 present.
-  bme280-device := null
-  bme280-driver := null
-  if not bus.test bme280.I2C-ADDRESS:
-    logger.error "no BME280 found"
+  // Test to see if AHT21 present, and if so, make use of it.
+  aht21-device := null
+  aht21-driver := null
+  if not bus.test Aht2x.I2C-ADDRESS:
+    logger.error "no AHT2x found"
   else:
-    logger.info "found BME280" --tags={"address":"0x$(%02x bme280.I2C-ADDRESS)"}
-    bme280-device = bus.device bme280.I2C-ADDRESS
-    bme280-driver = bme280.Driver bme280-device
-    ens160-driver.set-compensation-temp bme280-driver.read-temperature
-    ens160-driver.set-compensation-humidity bme280-driver.read-humidity
+    logger.info "found AHT2x" --tags={"address":"0x$(%02x Aht2x.I2C-ADDRESS)"}
+    aht21-device = bus.device Aht2x.I2C-ADDRESS
+    aht21-driver = Aht2x aht21-device --logger=logger
+    ens160-driver.set-compensation-temp aht21-driver.read-temperature
+    ens160-driver.set-compensation-humidity aht21-driver.read-humidity
 
   // Variables.
   start := Time.monotonic-us
@@ -95,9 +95,9 @@ main:
   while true:
     elapsed-time := Duration --us=(Time.monotonic-us - start)
     if ens160-driver.is-data-ready:
-      if bme280-driver:
-        ens160-driver.set-compensation-temp bme280-driver.read-temperature
-        ens160-driver.set-compensation-humidity bme280-driver.read-humidity
+      if aht21-driver:
+        ens160-driver.set-compensation-temp aht21-driver.read-temperature
+        ens160-driver.set-compensation-humidity aht21-driver.read-humidity
 
       temp := "$(%0.2f ens160-driver.get-temp)c".pad --left width
       humidity := "$(%0.2f ens160-driver.get-humidity)%rh".pad --left width
