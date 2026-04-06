@@ -5,7 +5,7 @@
 import gpio
 import i2c
 import log
-import aht2x show *
+import aht20 show *
 import ens16x show *
 
 /**
@@ -58,16 +58,16 @@ main:
   // Test to see if AHT21 present, and if so, make use of it.
   aht21-device := null
   aht21-driver := null
-  if not bus.test Aht2x.I2C-ADDRESS:
+  if not bus.test Aht20.I2C-ADDRESS:
     logger.error "no AHT2x found"
   else:
-    logger.info "found AHT2x" --tags={"address":"0x$(%02x Aht2x.I2C-ADDRESS)"}
-    aht21-device = bus.device Aht2x.I2C-ADDRESS
-    aht21-driver = Aht2x aht21-device --logger=logger
+    logger.info "found AHT2x" --tags={"address":"0x$(%02x Aht20.I2C-ADDRESS)"}
+    aht21-device = bus.device Aht20.I2C-ADDRESS
+    aht21-driver = Aht20 aht21-device --logger=logger
 
     // Set the compensation callback to the functions from the AHT21 driver.
-    ens160-driver.set-compensation-temp-callback :: aht21-driver.read-temperature
-    ens160-driver.set-compensation-humidity-callback :: aht21-driver.read-humidity
+    ens160-driver.set-compensation-temp-callback :: aht21-driver.read.temperature
+    ens160-driver.set-compensation-humidity-callback :: aht21-driver.read.humidity
 
     // Set the minimum delay between updates from the callbacks (default is
     // 30 secons, here is set to 20 as an example).
@@ -110,4 +110,5 @@ main:
       tvoc := "$ens160-driver.read-tvoc".pad --left width
       aqi-uba := "$ens160-driver.read-aqi-uba".pad --left 3
       print "$(duration-to-string elapsed-time) - $temp $humidity $eco2 $tvoc $aqi-uba"
+      yield
     sleep --ms=250

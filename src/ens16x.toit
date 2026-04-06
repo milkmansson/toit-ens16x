@@ -88,7 +88,9 @@ class Ens16x:
   static MISR-POLY_ ::= 0b00011101 // (0x1D)
   static MISR-IGNORE-REGISTERS_ ::= {
     REG-PART-ID_,
-    REG-DATA-MISR_ }
+    REG-DATA-MISR_,
+    REG-GPR-READ-BASE_,
+    }
 
   // Software tracking of CRC value (updated by $misr-update-software_).
   misr_/int := 0
@@ -175,7 +177,7 @@ class Ens16x:
 
     // Poll to determine if data is ready
     duration := Duration.ZERO
-    exception := catch:
+    exception := catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
       with-timeout TIMING-TIMEOUT_:
         duration = Duration.of:
           if current-op-mode != OPMODE-IDLE: set-operating-mode OPMODE-IDLE
@@ -240,10 +242,12 @@ class Ens16x:
   Sets the operating mode.
 
   Must be one of $OPMODE-DEEPSLEEP, $OPMODE-IDLE, $OPMODE-STANDARD, $OPMODE-RESET.
+    $OPMODE-LOWPOWER and $OPMODE-ULT-LOWPOWER are also valid, but only on the
+    ENS161 (see $model-is). Passing an ENS161-only mode on an ENS160 is an error.
 
   In $OPMODE-DEEPSLEEP mode, the ENS160 has limited functionality but will respond to
-    a change in mode.  $OPMODE-IDLE is intended for configuration before running an
-    active sensing mode.  $OPMODE-STANDARD is the active gas sensing mode.
+    a change in mode. $OPMODE-IDLE is intended for configuration before running an
+    active sensing mode. $OPMODE-STANDARD is the active gas sensing mode.
   */
   set-operating-mode mode/int -> none:
     assert: OPMODES_.contains mode
@@ -266,6 +270,15 @@ class Ens16x:
 
     // $OPMODE-DEEPSLEEP has $is-opmode-running always returning false, so exit.
     if mode == OPMODE-DEEPSLEEP: return
+
+    // Give the device a moment to begin transitioning before polling.
+    sleep --ms=20
+
+    // Check for an error condition before entering the poll - an invalid mode
+    // selection will never result in is-opmode-running becoming true.
+    if is-error:
+      logger_.error "device error after opmode write" --tags={"mode":OPMODES_[mode]}
+      throw "OPMODE could not be set"
 
     duration := Duration.ZERO
     exception := catch:
@@ -339,11 +352,14 @@ class Ens16x:
       temp-comp-callback-ts_ = Time.monotonic-us
 
   /**
-  Set the humidity used for calculations.
+  Sets the relative humidity used for compensation (in %RH).
 
-  This function allows the user to write ambient humidity (in %RH) to
-    the device for compensation. The register can be written at any time.  Set
-    to null to remove the configured humidity value.
+  The register can be written at any time. Set to null to clear the
+    configured value (writes raw 0 to the register).
+
+  Note: A raw register value of 0 is used as a null sentinel. This is
+    safe because 0 maps to 0%RH, which the device's own recommended
+    operating range (20–80%RH) excludes as a meaningful input.
   */
   set-compensation-humidity rh/float? -> none:
     if rh == null:
@@ -353,9 +369,14 @@ class Ens16x:
     write-register_ REG-RH-IN_ raw --width=WIDTH-16_
 
   /**
-  Get the custom humidity used for calculations.
+  Gets the relative humidity used for compensation (in %RH).
 
-  See $set-compensation-humidity.
+  The register can be read at any time. Set to null to clear the
+    configured value (writes raw 0 to the register).
+
+  Note: A raw register value of 0 is used as a null sentinel. This is
+    safe because 0 maps to 0%RH, which the device's own recommended
+    operating range (20–80%RH) excludes as a meaningful input.
   */
   get-compensation-humidity -> float?:
     raw := read-register_ REG-RH-IN_ --width=WIDTH-16_
@@ -560,6 +581,14 @@ class Ens16x:
   misr-resync_ -> none:
     misr_ = misr-hardware_
 
+
+  /**
+  Returns whether the detected hardware matches the given $model.
+
+  Use with the class constants $ENS160-HW-ID and $ENS161-HW-ID to
+    distinguish device capabilities at runtime. For example, $read-aqi-s
+    and $OPMODE-LOWPOWER are only available on the ENS161.
+  */
   model-is model/int -> bool:
     return hw-id_ == model
 
@@ -587,18 +616,21 @@ class Ens16x:
   /**
   Reads and optionally masks/parses register data.
 
-  Little Endian Only. This version checks and updates software MISR checksum
-    value (See $misr-update-software_ toitdocs and MISR information in the
-    Datasheet).  Do do this, the *-le functions have been switched to
-    .read-bytes, to allow the software CRC to be run against each individual
-    byte as required in the datasheet.
+  Little Endian only.  Uses `.read-bytes` so that each individual byte can
+    be fed to the software MISR calculation when $misr is true.
+
+  When $misr is true the software CRC is resynced before the read, updated
+    with every byte returned, and then compared against the hardware
+    $REG-DATA-MISR_ register.  A mismatch is logged as an error.  Callers
+    that do not pass `--misr` get no CRC overhead.
   */
   read-register_
       register/int
       --mask/int?=null
       --offset/int?=null
       --width/int=DEFAULT-REGISTER-WIDTH_
-      --signed/bool=false -> any:
+      --signed/bool=false
+      --misr/bool=false -> any:
     assert: (width == 8) or (width == 16)
     raw/ByteArray := #[]
 
@@ -608,12 +640,9 @@ class Ens16x:
     if offset == null:
       offset = mask.count-trailing-zeros
 
-    // Resync - too many registers adjust hardware MISR value that are not
-    // listed in the documentation.  Therefore reset on every 'interesting'
-    // read and ignore otherwise:
-    //if MISR-REGISTERS_.contains register:
-    //if not $MISR-IGNORE-REGISTERS_.contains register:
-    //  misr-resync_
+    // Resync before the read so that any preceding untracked reads (STATUS
+    // polling, GPR reads, etc.) do not leave the software CRC out of step.
+    if misr: misr-resync_
 
     register-value/int? := null
     if width == 8:
@@ -633,19 +662,11 @@ class Ens16x:
       logger_.error "read-register_ failed" --tags={"register":register}
       throw "read-register_ failed."
 
-    // If the register is not in the set of ignored registers, do MISR SW update:
-    if not (MISR-IGNORE-REGISTERS_.contains register):
-      //logger_.debug "register included in MISR" --tags={"register":"0x$(%02x register)","size":raw.size,"bytes":raw}
+    if misr:
       raw.do: | byte |
         misr-update-software_ byte
-
-      if not misr-valid_: // misr-hw != misr_
+      if not misr-valid_:
         logger_.error "CRC failed" --tags={"hw":"0x$(%02x misr-hardware_)","sw":"0x$(%02x misr_)"}
-        misr-resync_
-    else:
-      // Resync in case the ignored read did change the register.
-      if register != REG-DATA-MISR_:
-        misr-resync_
 
     if ((mask == 0xFFFF) or (mask == 0xFF)) and (offset == 0):
       return register-value
