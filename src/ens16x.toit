@@ -4,6 +4,7 @@
 
 import io show LITTLE-ENDIAN
 import log
+import math
 import serial.device as serial
 import serial.registers as registers
 
@@ -33,7 +34,7 @@ class Ens16x:
   static REG-GPR-WRITE-BASE_ ::= 0x40  // 0x40..0x47: General Purpose Write Registers
   static REG-GPR-READ-BASE_  ::= 0x48  // 0x48..0x4F: General Purpose Read Registers
 
-  // REG-REG-OPMODE_: Configuration of Operating Modes.
+  // REG-OPMODE_: Configuration of Operating Modes.
   static OPMODE-DEEPSLEEP     ::= 0x00 // DEEP SLEEP mode (low-power standby)
   static OPMODE-IDLE          ::= 0x01 // IDLE mode (low power)
   static OPMODE-STANDARD      ::= 0x02 // STANDARD Gas Sensing Mode (1 sample/sec)
@@ -48,7 +49,7 @@ class Ens16x:
     OPMODE-ULT-LOWPOWER: "OPMODE-ULT-LOWPOWER",  // ENS161 only.
     OPMODE-RESET: "OPMODE-RESET"}
 
-  // REG-REG-CONFIG_: Interrupt Pin Operation.
+  // REG-CONFIG_: Interrupt Pin Operation.
   static CFG-INT-POL-MASK_   ::= 0b01000000 // RW
   static CFG-INT-DRIVE-MASK_ ::= 0b00100000 // RW
   static CFG-INT-GPRR-MASK_  ::= 0b00010000 // RW Asserts if new data is in GPRR Registers
@@ -86,14 +87,8 @@ class Ens16x:
   // The polynomial used in the CRC computation in REG-DATA-MISR_, 76543210 bit weight factor.
   // 0b00011101 = x^8+x^4+x^3+x^2+x^0 (x^8 is implicit)
   static MISR-POLY_ ::= 0b00011101 // (0x1D)
-  static MISR-IGNORE-REGISTERS_ ::= {
-    REG-PART-ID_,
-    REG-DATA-MISR_,
-    REG-GPR-READ-BASE_,
-    }
 
-  // Software tracking of CRC value (updated by $misr-update-software_).
-  misr_/int := 0
+  static RAW-RESISTANCE-LOG2-SCALE_ ::= 2048.0
 
   // $write-register_ statics for bit width.  All 16 bit read/writes are LE.
   static WIDTH-8_ ::= 8
@@ -105,6 +100,9 @@ class Ens16x:
   static HW-IDS_ ::= {
     ENS160-HW-ID: "ENS160",
     ENS161-HW-ID: "ENS161"}
+
+  // Software tracking of CRC value (updated by $misr-update-software_).
+  misr_/int := 0
 
   // Class-wide variables:
   hw-id_/int := 0             // Track detected HW version for function use.
@@ -123,7 +121,7 @@ class Ens16x:
       --startup-operating-mode/int=OPMODE-STANDARD
       --logger/log.Logger=log.default:
     assert: OPMODES_.contains startup-operating-mode
-    logger_ = logger.with-name "ens160"
+    logger_ = logger.with-name "ens16x"
     reg_ = device.registers
 
     // Check Correct HW ID:
@@ -138,10 +136,15 @@ class Ens16x:
     // Reset SW MISR value as device reset will zero the HW value.
     misr-resync_
 
-    // Report device type deteceted and firmware.
+    // Report device type detected and firmware.
     firmware := get-firmware-version
     firmware-string := "v$(firmware[0]).$(firmware[1]).$(firmware[2])"
     logger_.info "$(HW-IDS_[hw-id_]) device started" --tags={"hw-id":"0x$(%02x hw-id_)", "firmware":firmware-string}
+
+    // Ensure device is cleanly in IDLE after firmware version query, as CMD
+    // operations may leave internal state that delays OPMODE transitions.
+    write-register_ REG-OPMODE_ OPMODE-IDLE
+    sleep TIMING-RESET_
 
     // Report if device is not ready to go.
     data-valid := data-validity
@@ -223,7 +226,7 @@ class Ens16x:
 
     // Wait for the device to finish its reset cycle - STATAS should go low.
     duration := Duration.ZERO
-    exception := catch:
+    exception := catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
       with-timeout TIMING-TIMEOUT_:
         duration = Duration.of:
           while is-opmode-running:
@@ -281,17 +284,17 @@ class Ens16x:
       throw "OPMODE could not be set"
 
     duration := Duration.ZERO
-    exception := catch:
+    exception := catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
       with-timeout TIMING-TIMEOUT_:
         duration = Duration.of:
           while not is-opmode-running:
             sleep --ms=100
 
     if exception:
-      logger_.error "set opmode timed out" --tags={"duration":duration.in-ms}
-      throw "OPMODE could not be set"
+      logger_.error "set opmode timed out" --tags={"duration":duration}
+      throw "OPMODE set timeout"
     else:
-      logger_.info "set opmode duration" --tags={"mode": OPMODES_[mode],"duration":duration.in-ms}
+      logger_.info "set opmode duration" --tags={"mode": OPMODES_[mode],"duration":duration}
 
   /**
   Returns the current operating mode.
@@ -478,25 +481,25 @@ class Ens16x:
   /** Returns the Air Quality Index [1..5] as per UBA guidelines. */
   read-aqi-uba -> int:
     update-if-necessary_
-    return read-register_ REG-DATA-AQI-UBA_ --mask=AQI-UBA-MASK_
+    return read-register_ REG-DATA-AQI-UBA_ --mask=AQI-UBA-MASK_ --misr
 
   /** Returns the total volatile organic compounds (ppb). */
   read-tvoc -> int:
     update-if-necessary_
-    return read-register_ REG-DATA-TVOC_ --width=WIDTH-16_
+    return read-register_ REG-DATA-TVOC_ --width=WIDTH-16_ --misr
 
   /** Returns the equivalent CO2 (ppm). */
   read-eco2 -> int:
     update-if-necessary_
-    return read-register_ REG-DATA-ECO2_ --width=WIDTH-16_
+    return read-register_ REG-DATA-ECO2_ --width=WIDTH-16_ --misr
 
-  /** Returns the SocioScense air quality index rate of change. [0-100]. */
+  /** Returns the ScioScense air quality index rate of change. [0-100]. */
   read-aqi-s -> int:
     update-if-necessary_
     if not (model-is ENS161-HW-ID):
       logger_.error "aqi-s not available on ENS160"
       return 0
-    return read-register_ REG-DATA-AQI-S_ --width=WIDTH-16_
+    return read-register_ REG-DATA-AQI-S_ --width=WIDTH-16_ --misr
 
   /**
   Get the temperature used in calculations (degrees celsius).
@@ -592,8 +595,8 @@ class Ens16x:
   model-is model/int -> bool:
     return hw-id_ == model
 
-  /*
-  Raw int16 read of the $reg general purpose registers.
+  /**
+  Raw int16 read of the general purpose registers (GPR).
 
   ENS160 datasheet specifies 'Sensor' 1 as R1, and 'Sensor 4' as R4.  The ENS161
     datasheet specifies 'Sensor 4' as R3 - however, the bits and registers are
@@ -612,6 +615,26 @@ class Ens16x:
       logger_.warn "sensor not available according to datasheet" --tags={"sensor":sensor,"hw-id":"0x$(%02x hw-id_)"}
     reg := sensor - 1
     return read-register_ (REG-GPR-READ-BASE_ + (reg * 2)) --width=16
+
+  /**
+  Converts a raw sensor value to resistance in Ohms.
+
+  Both the ENS160 and ENS161 datasheets specify the conversion as
+    'Ri-res[Ω] = 2^(Ri-raw / 2048)' where Ri-raw is the unsigned 16-bit
+    value obtained from $read-gpr-raw-int16.
+  */
+  static raw-to-resistance raw/int -> float:
+    return math.pow 2.0 (raw.to-float / RAW-RESISTANCE-LOG2-SCALE_)
+
+  /**
+  Reads a sensor's raw value and returns the resistance in Ohms.
+
+  Convenience wrapper that calls $read-gpr-raw-int16 and converts the
+    result with $raw-to-resistance.  See $read-gpr-raw-int16 for which
+    $sensor numbers are valid on each device variant.
+  */
+  read-sensor-resistance sensor/int -> float:
+    return raw-to-resistance (read-gpr-raw-int16 sensor)
 
   /**
   Reads and optionally masks/parses register data.
