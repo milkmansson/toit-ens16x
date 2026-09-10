@@ -61,8 +61,8 @@ main:
     logger.info "found BME280" --tags={"address":"0x$(%02x bme280.I2C-ADDRESS)"}
     bme280-device = bus.device bme280.I2C-ADDRESS
     bme280-driver = bme280.Driver bme280-device
-    ens160-driver.set-compensation-temp bme280-driver.read-temperature
-    ens160-driver.set-compensation-humidity bme280-driver.read-humidity
+    ens160-driver.set-compensation-temp-callback :: bme280-driver.read-temperature
+    ens160-driver.set-compensation-humidity-callback :: bme280-driver.read-humidity
 
   // Variables.
   start := Time.monotonic-us
@@ -95,10 +95,6 @@ main:
   while true:
     elapsed-time := Duration --us=(Time.monotonic-us - start)
     if ens160-driver.is-data-ready:
-      if bme280-driver:
-        ens160-driver.set-compensation-temp bme280-driver.read-temperature
-        ens160-driver.set-compensation-humidity bme280-driver.read-humidity
-
       temp := "$(%0.2f ens160-driver.get-temp)c".pad --left width
       humidity := "$(%0.2f ens160-driver.get-humidity)%rh".pad --left width
       eco2 := "$ens160-driver.read-eco2".pad --left width
