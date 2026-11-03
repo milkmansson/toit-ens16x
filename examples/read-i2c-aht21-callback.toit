@@ -40,8 +40,8 @@ main:
 
   // Enable and drive I2C
   frequency := 400_000
-  sda-pin := gpio.Pin SDA-PIN
-  scl-pin := gpio.Pin SCL-PIN
+  sda-pin := SDA-PIN
+  scl-pin := SCL-PIN
   bus := i2c.Bus --sda=sda-pin --scl=scl-pin --frequency=frequency
 
   // Test to see if ENS16x present.

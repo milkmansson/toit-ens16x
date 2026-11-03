@@ -5,7 +5,7 @@
 import gpio
 import i2c
 import log
-import aht2x show *
+import aht20 show *
 import ens16x show *
 
 /**
@@ -37,8 +37,8 @@ main:
 
   // Enable and drive I2C
   frequency := 400_000
-  sda-pin := gpio.Pin SDA-PIN
-  scl-pin := gpio.Pin SCL-PIN
+  sda-pin := SDA-PIN
+  scl-pin := SCL-PIN
   bus := i2c.Bus --sda=sda-pin --scl=scl-pin --frequency=frequency
 
   // Test to see if ENS16x present.
@@ -55,12 +55,12 @@ main:
   // Test to see if AHT21 present, and if so, make use of it.
   aht21-device := null
   aht21-driver := null
-  if not bus.test Aht2x.I2C-ADDRESS:
+  if not bus.test Aht20.I2C-ADDRESS:
     logger.error "no AHT2x found"
   else:
-    logger.info "found AHT2x" --tags={"address":"0x$(%02x Aht2x.I2C-ADDRESS)"}
-    aht21-device = bus.device Aht2x.I2C-ADDRESS
-    aht21-driver = Aht2x aht21-device --logger=logger
+    logger.info "found AHT2x" --tags={"address":"0x$(%02x Aht20.I2C-ADDRESS)"}
+    aht21-device = bus.device Aht20.I2C-ADDRESS
+    aht21-driver = Aht20 aht21-device --logger=logger
     ens160-driver.set-compensation-temp aht21-driver.read-temperature
     ens160-driver.set-compensation-humidity aht21-driver.read-humidity
 

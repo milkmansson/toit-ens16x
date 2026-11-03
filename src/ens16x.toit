@@ -108,8 +108,9 @@ class Ens16x:
   // Software tracking of CRC value (updated by $misr-update-software_).
   misr_/int := 0
 
-  // Serialises resync/read/compare in $read-register_ so that concurrent
-  // readers cannot interleave and produce false CRC failures.
+  // Serialises every register read in $read-register_ so that concurrent
+  // readers cannot interleave and produce false CRC failures. The hardware
+  // MISR changes on any read of registers 0x20 to 0x37, not only on --misr reads.
   misr-mutex_/monitor.Mutex ::= monitor.Mutex
 
   // Detected HW version for function use. Mutable only because it is set
@@ -130,6 +131,7 @@ class Ens16x:
       --startup-operating-mode/int=OPMODE-STANDARD
       --logger/log.Logger=log.default:
     assert: OPMODES_.contains startup-operating-mode
+    assert: startup-operating-mode != OPMODE-RESET
     logger_ = logger.with-name "ens16x"
     reg_ = device.registers
 
@@ -138,6 +140,11 @@ class Ens16x:
     if not HW-IDS_.contains hw-id_:
       logger_.error "HW ID unsupported" --tags={"hw-id": "0x$(%03x hw-id_)"}
       throw "Incorrect HW ID"
+
+    // Reject modes this device cannot run before anything is written to it.
+    if (OPMODES-ENS161-ONLY_.contains startup-operating-mode) and (hw-id_ != ENS161-HW-ID):
+      logger_.error "startup operating mode not available on this device" --tags={"mode": OPMODES_[startup-operating-mode], "hw-id": "0x$(%03x hw-id_)"}
+      throw "OPMODE not supported on $(HW-IDS_[hw-id_])"
 
     // Reset device, returning to OPMODE-IDLE.
     reset OPMODE-IDLE
@@ -163,12 +170,15 @@ class Ens16x:
     else if data-valid == OUTPUT-WARM-UP_:
       logger_.warn "device still in 3 minute warmup period"
     else if data-valid == OUTPUT-INVALID_:
-      logger_.error "device reports invalid"
-      throw "device reports invalid"
+      // Not fatal. The datasheet describes this flag in terms of sensing
+      // output, and the device is only in IDLE at this point.
+      logger_.warn "device reports invalid output while in IDLE"
 
     // Set to operating mode as given to the constructor.
     set-operating-mode startup-operating-mode
-    logger_.info "currently in operating mode" --tags={"opmode": OPMODES_[get-operating-mode]}
+    current-mode := get-operating-mode
+    mode-name := OPMODES_.get current-mode --if-absent=: "0x$(%02x current-mode)"
+    logger_.info "currently in operating mode" --tags={"opmode": mode-name}
 
     if is-error:
       logger_.error "currently in ERROR condition"
@@ -193,30 +203,33 @@ class Ens16x:
     original-mode := get-operating-mode
     out-bytes := [0x00, 0x00, 0x00]
 
-    duration := Duration.ZERO
+    start-us := Time.monotonic-us
     exception := null
     try:
       if original-mode != OPMODE-IDLE: set-operating-mode OPMODE-IDLE
       // Poll to determine if data is ready.
       exception = catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
         with-timeout TIMING-TIMEOUT_:
-          duration = Duration.of:
-            cmd-no-op_
-            cmd-clear-gpr_
-            cmd-get-appver_
-            while not is-gpr-data-ready:
-              sleep --ms=25
-            out-bytes[0] = read-register_ (REG-GPR-READ-BASE_ + 4)
-            out-bytes[1] = read-register_ (REG-GPR-READ-BASE_ + 5)
-            out-bytes[2] = read-register_ (REG-GPR-READ-BASE_ + 6)
+          cmd-no-op_
+          cmd-clear-gpr_
+          cmd-get-appver_
+          while not is-gpr-data-ready:
+            sleep --ms=25
+          out-bytes[0] = read-register_ (REG-GPR-READ-BASE_ + 4)
+          out-bytes[1] = read-register_ (REG-GPR-READ-BASE_ + 5)
+          out-bytes[2] = read-register_ (REG-GPR-READ-BASE_ + 6)
     finally:
       if original-mode != OPMODE-IDLE: set-operating-mode original-mode
 
     if exception:
-      logger_.error "get-firmware-version - wait for is-gpr-data-ready timed out" --tags={"duration": duration.in-ms}
+      logger_.error "get-firmware-version - wait for is-gpr-data-ready timed out" --tags={"duration": elapsed-ms_ start-us}
       throw "get-firmware-version timeout"
 
     return out-bytes
+
+  /** Returns the milliseconds elapsed since $start-us (a $Time.monotonic-us value). */
+  elapsed-ms_ start-us/int -> int:
+    return (Time.monotonic-us - start-us) / 1000
 
   cmd-get-appver_ -> none:
     write-register_ REG-CMD_ CMD-GET-APPVER_
@@ -243,18 +256,17 @@ class Ens16x:
     sleep TIMING-RESET_
 
     // Wait for the device to finish its reset cycle - STATAS should go low.
-    duration := Duration.ZERO
+    start-us := Time.monotonic-us
     exception := catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
       with-timeout TIMING-TIMEOUT_:
-        duration = Duration.of:
-          while is-opmode-running:
-            sleep --ms=25
+        while is-opmode-running:
+          sleep --ms=25
 
     if exception:
-      logger_.error "reset - device did not clear STATAS after reset" --tags={"duration": duration.in-ms}
+      logger_.error "reset - device did not clear STATAS after reset" --tags={"duration": elapsed-ms_ start-us}
       throw "reset failed"
     else:
-      logger_.debug "reset completed" --tags={"duration": duration.in-ms}
+      logger_.debug "reset completed" --tags={"duration": elapsed-ms_ start-us}
 
     misr-resync_
     if mode != OPMODE-DEEPSLEEP: set-operating-mode mode
@@ -309,18 +321,17 @@ class Ens16x:
       logger_.error "device error after opmode write" --tags={"mode": OPMODES_[mode]}
       throw "OPMODE could not be set"
 
-    duration := Duration.ZERO
+    start-us := Time.monotonic-us
     exception := catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
       with-timeout TIMING-TIMEOUT_:
-        duration = Duration.of:
-          while not is-opmode-running:
-            sleep --ms=100
+        while not is-opmode-running:
+          sleep --ms=100
 
     if exception:
-      logger_.error "set opmode timed out" --tags={"duration": duration.in-ms}
+      logger_.error "set opmode timed out" --tags={"duration": elapsed-ms_ start-us}
       throw "OPMODE set timeout"
     else:
-      logger_.info "set opmode duration" --tags={"mode": OPMODES_[mode], "duration": duration.in-ms}
+      logger_.info "set opmode duration" --tags={"mode": OPMODES_[mode], "duration": elapsed-ms_ start-us}
 
   /**
   Returns the current operating mode.
@@ -430,14 +441,25 @@ class Ens16x:
 
   /**
   Updates the compensation values if it is time to do so.
+
+  A failing callback (for example an I2C error on the temperature/humidity
+    sensor) is logged as a warning and does not stop the data read that
+    triggered the update. The callback is not tried again until the TTL has
+    passed, and the device keeps using the last compensation values it was given.
   */
   update-if-necessary_ -> none:
-    if humidity-comp-callback_ and (Time.monotonic-us >= (humidity-comp-callback-ts_ + callback-ttl_.in-us)):
-      set-compensation-humidity humidity-comp-callback_.call
-      humidity-comp-callback-ts_ = Time.monotonic-us
-    if temp-comp-callback_ and (Time.monotonic-us >= (temp-comp-callback-ts_ + callback-ttl_.in-us)):
-      set-compensation-temp temp-comp-callback_.call
-      temp-comp-callback-ts_ = Time.monotonic-us
+    now-us := Time.monotonic-us
+    ttl-us := callback-ttl_.in-us
+    if humidity-comp-callback_ and (now-us >= (humidity-comp-callback-ts_ + ttl-us)):
+      humidity-comp-callback-ts_ = now-us
+      error := catch --unwind=(: it == DEADLINE-EXCEEDED-ERROR):
+        set-compensation-humidity humidity-comp-callback_.call
+      if error: logger_.warn "humidity compensation callback failed" --tags={"error": "$error"}
+    if temp-comp-callback_ and (now-us >= (temp-comp-callback-ts_ + ttl-us)):
+      temp-comp-callback-ts_ = now-us
+      error := catch --unwind=(: it == DEADLINE-EXCEEDED-ERROR):
+        set-compensation-temp temp-comp-callback_.call
+      if error: logger_.warn "temperature compensation callback failed" --tags={"error": "$error"}
 
   /**
   Sets the delay between callback sensor reads.
@@ -514,7 +536,8 @@ class Ens16x:
     return read-register_ REG-DATA-ECO2_ --width=WIDTH-16_ --misr
 
   /**
-  Returns the ScioSense air quality index rate of change [0..100].
+  Returns the ScioSense relative air quality index, in arbitrary units
+    between 0 and 500.
 
   Only available on the ENS161; throws on other devices.
   */
@@ -562,6 +585,12 @@ class Ens16x:
     internal variable $misr_ in sync with the hardware register. Comparing the
     hardware and software CRC allows one to determine if any data reads have
     become corrupt.
+
+  Note: the datasheet's reference C code tests `misr&0x80==0`. In C that is
+    evaluated as `misr&(0x80==0)`, so it always takes the polynomial branch.
+    This implementation uses the intended `(misr & 0x80) == 0`. Which one the
+    silicon matches has not been confirmed here. If CRC failures are logged
+    on a clean bus, check this first.
   */
   misr-update-software_ data/int -> none:
     assert: 0 <= data <= 255
@@ -641,7 +670,10 @@ class Ens16x:
 
   Both the ENS160 and ENS161 datasheets specify the conversion as
     'Ri-res[Ω] = 2^(Ri-raw / 2048)' where Ri-raw is the unsigned 16-bit
-    value obtained from $read-gpr-raw-int16.
+    value obtained from $read-gpr-raw-int16. The datasheets define this
+    only for sensor 4. The ENS160 datasheet describes the sensor 1 raw
+    value as 'Arbitrary logarithmic units - no resistance values', so this
+    conversion must not be applied to it.
   */
   static raw-to-resistance raw/int -> float:
     return math.pow 2.0 (raw.to-float / RAW-RESISTANCE-LOG2-SCALE_)
@@ -650,10 +682,16 @@ class Ens16x:
   Reads a sensor's raw value and returns the resistance in Ohms.
 
   Convenience wrapper that calls $read-gpr-raw-int16 and converts the
-    result with $raw-to-resistance. See $read-gpr-raw-int16 for which
-    $sensor numbers are valid on each device variant.
+    result with $raw-to-resistance.
+
+  Only sensor 4 has a resistance value according to the datasheets. Throws
+    for any other $sensor. Use $read-gpr-raw-int16 for the raw value of sensor 1
+    on the ENS160.
   */
   read-sensor-resistance sensor/int -> float:
+    if sensor != 4:
+      logger_.error "sensor has no resistance value according to datasheet" --tags={"sensor": sensor, "hw-id": "0x$(%03x hw-id_)"}
+      throw "Sensor $sensor has no resistance value"
     return raw-to-resistance (read-gpr-raw-int16 sensor)
 
   /**
@@ -664,9 +702,10 @@ class Ens16x:
 
   When $misr is true the software CRC is resynced before the read, updated
     with every byte returned, and then compared against the hardware
-    $REG-DATA-MISR_ register. A mismatch is logged as an error. The whole
-    sequence is guarded by $misr-mutex_ so concurrent readers do not corrupt
-    the software CRC. Callers that do not pass `--misr` get no CRC overhead.
+    $REG-DATA-MISR_ register. A mismatch is logged as an error. Every read,
+    with or without `--misr`, is guarded by $misr-mutex_ so concurrent readers
+    cannot change the hardware CRC part way through another reader's
+    sequence. Callers that do not pass `--misr` get no CRC overhead.
   */
   read-register_ register/int -> int
       --mask/int?=null
@@ -683,17 +722,18 @@ class Ens16x:
 
     byte-count := (width == 8) ? 1 : 2
     raw/ByteArray := #[]
-    if misr:
-      misr-mutex_.do:
+    misr-mutex_.do:
+      if misr:
         // Resync before the read so that any preceding untracked reads (STATUS
         // polling, GPR reads, etc.) do not leave the software CRC out of step.
         misr-resync_
         raw = reg_.read-bytes register byte-count
         raw.do: misr-update-software_ it
-        if not misr-valid_:
-          logger_.error "CRC failed" --tags={"hw": "0x$(%02x misr-hardware_)", "sw": "0x$(%02x misr_)"}
-    else:
-      raw = reg_.read-bytes register byte-count
+        hardware-misr := misr-hardware_
+        if hardware-misr != misr_:
+          logger_.error "CRC failed" --tags={"hw": "0x$(%02x hardware-misr)", "sw": "0x$(%02x misr_)"}
+      else:
+        raw = reg_.read-bytes register byte-count
 
     register-value/int := 0
     if width == 8:

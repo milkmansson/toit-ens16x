@@ -6,7 +6,7 @@ import gpio
 import i2c
 import log
 import ens16x show *
-import bme280
+import bmx280
 
 /**
 Example of ENS160 operation via I2C.
@@ -37,8 +37,8 @@ main:
 
   // Enable and drive I2C
   frequency := 400_000
-  sda-pin := gpio.Pin SDA-PIN
-  scl-pin := gpio.Pin SCL-PIN
+  sda-pin := SDA-PIN
+  scl-pin := SCL-PIN
   bus := i2c.Bus --sda=sda-pin --scl=scl-pin --frequency=frequency
 
   // Test to see if ENS16x present.
@@ -55,12 +55,12 @@ main:
   // Test to see if BME280 present.
   bme280-device := null
   bme280-driver := null
-  if not bus.test bme280.I2C-ADDRESS:
+  if not bus.test bmx280.I2C-ADDRESS:
     logger.error "no BME280 found"
   else:
-    logger.info "found BME280" --tags={"address":"0x$(%02x bme280.I2C-ADDRESS)"}
-    bme280-device = bus.device bme280.I2C-ADDRESS
-    bme280-driver = bme280.Driver bme280-device
+    logger.info "found BME280" --tags={"address":"0x$(%02x bmx280.I2C-ADDRESS)"}
+    bme280-device = bus.device bmx280.I2C-ADDRESS
+    bme280-driver = bmx280.Driver bme280-device
     ens160-driver.set-compensation-temp bme280-driver.read-temperature
     ens160-driver.set-compensation-humidity bme280-driver.read-humidity
 
