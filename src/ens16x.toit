@@ -248,22 +248,23 @@ class Ens16x:
 
   A normal reset would put the device into $OPMODE-DEEPSLEEP. This function
     defaults to $OPMODE-IDLE unless $mode is supplied. After the reset
-    command, this function waits until the device reports no opmode running
-    before proceeding to set the target mode.
+    command, this function waits until the OPMODE register no longer reads
+    $OPMODE-RESET before proceeding to set the target mode.
   */
   reset mode/int=OPMODE-IDLE -> none:
     write-register_ REG-OPMODE_ OPMODE-RESET
     sleep TIMING-RESET_
 
-    // Wait for the device to finish its reset cycle - STATAS should go low.
+    // Wait for the device to finish its reset cycle. The STATAS status bit is
+    // not used: it has been observed to stay low even while sensing.
     start-us := Time.monotonic-us
     exception := catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
       with-timeout TIMING-TIMEOUT_:
-        while is-opmode-running:
+        while get-operating-mode == OPMODE-RESET:
           sleep --ms=25
 
     if exception:
-      logger_.error "reset - device did not clear STATAS after reset" --tags={"duration": elapsed-ms_ start-us}
+      logger_.error "reset - device did not leave RESET mode" --tags={"duration": elapsed-ms_ start-us}
       throw "reset failed"
     else:
       logger_.debug "reset completed" --tags={"duration": elapsed-ms_ start-us}
@@ -299,9 +300,8 @@ class Ens16x:
     if current-mode != OPMODE-IDLE and current-mode != OPMODE-RESET:
       write-register_ REG-OPMODE_ OPMODE-IDLE
       sleep TIMING-RESET_
-      // Note: IDLE is not polled via $is-opmode-running below. Whether the
-      // STATAS bit is set while in IDLE has not been confirmed against the
-      // datasheet, so a timed wait is used instead.
+      // IDLE is confirmed by a timed wait only. The mode actually requested
+      // is confirmed by reading OPMODE back below.
       if mode == OPMODE-IDLE: return
 
     write-register_ REG-OPMODE_ mode
@@ -309,14 +309,14 @@ class Ens16x:
       sleep TIMING-RESET_
       return
 
-    // $OPMODE-DEEPSLEEP has $is-opmode-running always returning false, so exit.
+    // There is nothing further to wait for in $OPMODE-DEEPSLEEP, so exit.
     if mode == OPMODE-DEEPSLEEP: return
 
     // Give the device a moment to begin transitioning before polling.
     sleep --ms=20
 
     // Check for an error condition before entering the poll - an invalid mode
-    // selection will never result in is-opmode-running becoming true.
+    // selection will never be reflected in the OPMODE register.
     if is-error:
       logger_.error "device error after opmode write" --tags={"mode": OPMODES_[mode]}
       throw "OPMODE could not be set"
@@ -324,8 +324,11 @@ class Ens16x:
     start-us := Time.monotonic-us
     exception := catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
       with-timeout TIMING-TIMEOUT_:
-        while not is-opmode-running:
-          sleep --ms=100
+        // The STATAS status bit is not used: it has been observed to stay low
+        // while the device is in $OPMODE-STANDARD. Reading OPMODE back is used
+        // instead.
+        while get-operating-mode != mode:
+          sleep --ms=25
 
     if exception:
       logger_.error "set opmode timed out" --tags={"duration": elapsed-ms_ start-us}
@@ -473,7 +476,15 @@ class Ens16x:
   set-callback-ttl ttl/Duration -> none:
     callback-ttl_ = ttl
 
-  /** Whether an OPMODE is running. */
+  /**
+  Whether the STATAS status bit is set ("an OPMODE is running" according to
+    the datasheet).
+
+  This bit has been observed to stay low while the device is in
+    $OPMODE-STANDARD, with the OPMODE register reading back correctly and
+    data being produced. The driver does not rely on it. Use
+    $get-operating-mode to find the current mode.
+  */
   is-opmode-running -> bool:
     return (read-register_ REG-STATUS_ --mask=STATUS-OPMODE-RUNNING-MASK_) == 1
 
