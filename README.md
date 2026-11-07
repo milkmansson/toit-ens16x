@@ -186,8 +186,8 @@ varying levels of success.  If the board is misbehaving, this
 - No warranties for this work, express or implied.
 
 ## Credits
-- AI has been used for reviews, analysing & compiling data/results, and
-  assisting with ensuring accuracy.
+- AI has been used for reviews, bugfixing, analysing & compiling data/results, and
+  ensuring accuracy.
 - [Florian](https://github.com/floitsch) for the tireless help and encouragement
 - The wider Toit developer team (past and present) for a truly excellent product
 
@@ -200,3 +200,4 @@ One would assume you are here because you know what Toit is.  If you dont:
 > ESP32. [[link](https://toitlang.org/)]
 - [Review on Soracom](https://soracom.io/blog/internet-of-microcontrollers-made-easy-with-toit-x-soracom/)
 - [Review on eeJournal](https://www.eejournal.com/article/its-time-to-get-toit)
+- [Wikipedia](https://en.wikipedia.org/wiki/Toit)
