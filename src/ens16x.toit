@@ -255,8 +255,8 @@ class Ens16x:
     write-register_ REG-OPMODE_ OPMODE-RESET
     sleep TIMING-RESET_
 
-    // Wait for the device to finish its reset cycle. The STATAS status bit is
-    // not used: it has been observed to stay low even while sensing.
+    // Wait for the device to finish its reset cycle. Nothing is running after
+    // a reset, so STATAS is not used here.
     start-us := Time.monotonic-us
     exception := catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
       with-timeout TIMING-TIMEOUT_:
@@ -283,6 +283,10 @@ class Ens16x:
   In $OPMODE-DEEPSLEEP mode, the ENS160 has limited functionality but will respond to
     a change in mode. $OPMODE-IDLE is intended for configuration before running an
     active sensing mode. $OPMODE-STANDARD is the active gas sensing mode.
+
+  For the gas sensing modes, throws if the OPMODE register does not read back
+    the requested mode, or if the device does not report that it is running
+    (see $is-opmode-running) within $TIMING-TIMEOUT_.
   */
   set-operating-mode mode/int -> none:
     assert: OPMODES_.contains mode
@@ -324,17 +328,24 @@ class Ens16x:
     start-us := Time.monotonic-us
     exception := catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
       with-timeout TIMING-TIMEOUT_:
-        // The STATAS status bit is not used: it has been observed to stay low
-        // while the device is in $OPMODE-STANDARD. Reading OPMODE back is used
-        // instead.
         while get-operating-mode != mode:
           sleep --ms=25
 
     if exception:
       logger_.error "set opmode timed out" --tags={"duration": elapsed-ms_ start-us}
       throw "OPMODE set timeout"
-    else:
-      logger_.info "set opmode duration" --tags={"mode": OPMODES_[mode], "duration": elapsed-ms_ start-us}
+
+    // The OPMODE register only echoes the value that was written. The STATAS
+    // status bit is what shows the device has actually started running the mode.
+    exception = catch --unwind=(: it != DEADLINE-EXCEEDED-ERROR):
+      with-timeout TIMING-TIMEOUT_:
+        while not is-opmode-running:
+          sleep --ms=25
+
+    if exception:
+      logger_.error "OPMODE accepted but device is not running (STATAS never set)" --tags={"mode": OPMODES_[mode], "status": "0x$(%02x (read-register_ REG-STATUS_))", "duration": elapsed-ms_ start-us}
+      throw "OPMODE not running"
+    logger_.info "set opmode duration" --tags={"mode": OPMODES_[mode], "duration": elapsed-ms_ start-us}
 
   /**
   Returns the current operating mode.
@@ -480,10 +491,10 @@ class Ens16x:
   Whether the STATAS status bit is set ("an OPMODE is running" according to
     the datasheet).
 
-  This bit has been observed to stay low while the device is in
-    $OPMODE-STANDARD, with the OPMODE register reading back correctly and
-    data being produced. The driver does not rely on it. Use
-    $get-operating-mode to find the current mode.
+  The OPMODE register only echoes the value last written, so this bit is what
+    shows the device is actually running a gas sensing mode. $set-operating-mode
+    waits for it after selecting such a mode. Use $get-operating-mode to find
+    the mode that was requested.
   */
   is-opmode-running -> bool:
     return (read-register_ REG-STATUS_ --mask=STATUS-OPMODE-RUNNING-MASK_) == 1

@@ -92,9 +92,21 @@ main:
   logger.info "Current TVOC: $ens160-driver.read-tvoc"
   logger.info "Current AQI(UBA): $ens160-driver.read-aqi-uba"
 
+  last-data-us := start
+
   while true:
     elapsed-time := Duration --us=(Time.monotonic-us - start)
+    // Say so if nothing has arrived for a while, rather than staying silent.
+    if Time.monotonic-us - last-data-us > 5_000_000:
+      logger.warn "no new data for 5 s" --tags={
+        "opmode": ens160-driver.get-operating-mode,
+        "running": ens160-driver.is-opmode-running,
+        "validity": ens160-driver.data-validity,
+        "error": ens160-driver.is-error,
+      }
+      last-data-us = Time.monotonic-us
     if ens160-driver.is-data-ready:
+      last-data-us = Time.monotonic-us
       if aht21-driver:
         ens160-driver.set-compensation-temp aht21-driver.read-temperature
         ens160-driver.set-compensation-humidity aht21-driver.read-humidity

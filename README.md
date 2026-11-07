@@ -99,6 +99,26 @@ information.
 > If unpowered before the conclusion of this 24h period, the ENS160 will resume
 > "Initial Start-up" mode again after powering on again.
 
+### Startup checks
+The OPMODE register only echoes the value last written to it, so reading it
+back does not show that the sensor is measuring.  After selecting a gas sensing
+mode, `.set-operating-mode` (and so the constructor) also waits for the STATAS
+status bit, which shows the device is running.  It sets about one second after
+the mode is written.
+
+If the device accepts the mode but STATAS never sets within five seconds, the
+driver logs the status register and throws `"OPMODE not running"`.  The I2C
+interface is answering in that case, but the sensing part of the chip is not
+running.  Check that the module's supply holds up when the heater starts, and
+try another host board.
+
+The examples also log a warning if no new data arrives for five seconds.
+
+### Address selection
+The ENS160 is at `0x53` by default, and at `0x52` when its ADDR pin is tied low.
+Two devices can share a bus using one of each (see `Ens16x.I2C-ADDRESS` and
+`Ens16x.I2C-ADDRESS-ALT`).  The CS pin must be high for I2C.
+
 ### Examples
 See the [examples](./examples/) folder for examples of the driver in use, and
 additional information against functions in the Toitdocs alongside the driver code.
@@ -142,7 +162,7 @@ suggests that standard reference conditions are used - 25°c/50% RH.
 An example as shown below.  The Datasheet shows that the ENS160 exposes two
 registers, whereas the ENS161 has just one.  (The error case of reading the
 additional ENS160 sensor #1 with the ENS161 is logged, but not guarded against.)
-See the [`read-raw.toit`](./examples/read-raw.toit) example.
+See the [`read-raw-i2c.toit`](./examples/read-raw-i2c.toit) example.
 
 ## Links
 - [ENS160 Datasheet](https://www.sciosense.com/wp-content/uploads/2023/12/ENS160-Datasheet.pdf)
