@@ -25,10 +25,10 @@ main:
   logger = logger.with-level log.DEBUG-LEVEL
 
   bus := spi.Bus
-    --miso=gpio.Pin 7
-    --mosi=gpio.Pin 6
-    --clock=gpio.Pin 5
-  cs-pin := gpio.Pin 15
+    --miso= 7
+    --mosi= 6
+    --clock= 5
+  cs-pin := 15
 
   // Call/start ENS16x driver.
   ens160-device := bus.device --cs=cs-pin --frequency=200_000

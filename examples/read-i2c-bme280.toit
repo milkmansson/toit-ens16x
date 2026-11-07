@@ -6,7 +6,7 @@ import gpio
 import i2c
 import log
 import ens16x show *
-import bme280
+import bmx280
 
 /**
 Example of ENS160 operation via I2C.
@@ -24,6 +24,9 @@ Code will still run if BME280 not present.  ENS160 will simply return its
 
 */
 
+SDA-PIN := 19
+SCL-PIN := 20
+
 main:
   print
   print
@@ -34,31 +37,30 @@ main:
 
   // Enable and drive I2C
   frequency := 400_000
-  sda-pin := gpio.Pin 8
-  scl-pin := gpio.Pin 9
+  sda-pin := SDA-PIN
+  scl-pin := SCL-PIN
   bus := i2c.Bus --sda=sda-pin --scl=scl-pin --frequency=frequency
 
   // Test to see if ENS16x present.
-  ens16x-i2c-address := Ens16x.I2C-ADDRESS
-  if not bus.test ens16x-i2c-address:
-    logger.error "no ENS160 found"
+  if not bus.test Ens16x.I2C-ADDRESS:
+    logger.error "no ENS160 found" --tags={"address":"0x$(%02x Ens16x.I2C-ADDRESS)", "SDA": SDA-PIN, "SCL": SCL-PIN}
     return
-  logger.info "found ENS160" --tags={"address":"0x$(%02x ens16x-i2c-address)"}
+  logger.info "found ENS160" --tags={"address":"0x$(%02x Ens16x.I2C-ADDRESS)"}
 
   // Call/start ENS16x driver.
-  ens160-device := bus.device Ens16x.I2C_ADDRESS
+  ens160-device := bus.device Ens16x.I2C-ADDRESS
   ens160-driver := Ens16x ens160-device --startup-operating-mode=Ens16x.OPMODE-STANDARD --logger=logger
   ens160-driver.set-operating-mode Ens16x.OPMODE-STANDARD
 
   // Test to see if BME280 present.
   bme280-device := null
   bme280-driver := null
-  if not bus.test bme280.I2C-ADDRESS:
+  if not bus.test bmx280.I2C-ADDRESS:
     logger.error "no BME280 found"
   else:
-    logger.info "found BME280" --tags={"address":"0x$(%02x bme280.I2C-ADDRESS)"}
-    bme280-device = bus.device bme280.I2C-ADDRESS
-    bme280-driver = bme280.Driver bme280-device
+    logger.info "found BME280" --tags={"address":"0x$(%02x bmx280.I2C-ADDRESS)"}
+    bme280-device = bus.device bmx280.I2C-ADDRESS
+    bme280-driver = bmx280.Driver bme280-device
     ens160-driver.set-compensation-temp bme280-driver.read-temperature
     ens160-driver.set-compensation-humidity bme280-driver.read-humidity
 
@@ -90,9 +92,21 @@ main:
   logger.info "Current TVOC: $ens160-driver.read-tvoc"
   logger.info "Current AQI(UBA): $ens160-driver.read-aqi-uba"
 
+  last-data-us := start
+
   while true:
     elapsed-time := Duration --us=(Time.monotonic-us - start)
+    // Say so if nothing has arrived for a while, rather than staying silent.
+    if Time.monotonic-us - last-data-us > 5_000_000:
+      logger.warn "no new data for 5 s" --tags={
+        "opmode": ens160-driver.get-operating-mode,
+        "running": ens160-driver.is-opmode-running,
+        "validity": ens160-driver.data-validity,
+        "error": ens160-driver.is-error,
+      }
+      last-data-us = Time.monotonic-us
     if ens160-driver.is-data-ready:
+      last-data-us = Time.monotonic-us
       if bme280-driver:
         ens160-driver.set-compensation-temp bme280-driver.read-temperature
         ens160-driver.set-compensation-humidity bme280-driver.read-humidity

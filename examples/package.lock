@@ -1,11 +1,22 @@
+sdk: ^2.0.0-alpha.196
 prefixes:
-  bme280: bme280-driver
-  ens16x: ..
+  aht20: github.com/toit-pkg/aht20-2
+  bmx280: github.com/toit-pkg/toit-bmx280-1
+  ens16x: toit-ens16x
 packages:
-  ..:
+  github.com/toit-pkg/aht20-2:
+    hash: 18610dd7b5b93c4da3803e12ca6f328b7db7fdb2
+    url: github.com/toit-pkg/aht20
+    version: 2.0.0
+  github.com/toit-pkg/toit-bmx280-1:
+    hash: d1de0a840c125769f28b6ddaa8d446a1dc4b1f22
+    prefixes:
+      sensors: github.com/toitware/toit-sensors-1
+    url: github.com/toit-pkg/toit-bmx280
+    version: 1.0.0
+  github.com/toitware/toit-sensors-1:
+    hash: f9f5662a0f21016259ff6907419e54d00223714a
+    url: github.com/toitware/toit-sensors
+    version: 1.0.0
+  toit-ens16x:
     path: ..
-  bme280-driver:
-    url: github.com/toitware/bme280-driver
-    name: bme280
-    version: 1.1.0
-    hash: e2220d286aad8bbb78e27ffcbf558cbec0e1c687

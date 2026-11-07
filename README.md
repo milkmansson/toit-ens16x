@@ -99,15 +99,70 @@ information.
 > If unpowered before the conclusion of this 24h period, the ENS160 will resume
 > "Initial Start-up" mode again after powering on again.
 
+### Startup checks
+The OPMODE register only echoes the value last written to it, so reading it
+back does not show that the sensor is measuring.  After selecting a gas sensing
+mode, `.set-operating-mode` (and so the constructor) also waits for the STATAS
+status bit, which shows the device is running.  It sets about one second after
+the mode is written.
+
+If the device accepts the mode but STATAS never sets within five seconds, the
+driver logs the status register and throws `"OPMODE not running"`.  The I2C
+interface is answering in that case, but the sensing part of the chip is not
+running.  Check that the module's supply holds up when the heater starts, and
+try another host board.
+
+The examples also log a warning if no new data arrives for five seconds.
+
+### Address selection
+The ENS160 is at `0x53` by default, and at `0x52` when its ADDR pin is tied low.
+Two devices can share a bus using one of each (see `Ens16x.I2C-ADDRESS` and
+`Ens16x.I2C-ADDRESS-ALT`).  The CS pin must be high for I2C.
+
 ### Examples
 See the [examples](./examples/) folder for examples of the driver in use, and
 additional information against functions in the Toitdocs alongside the driver code.
+
+### Use with the ASAIR AHT21 combo module
+The ENS160 can be configured with a temperature and humidity compensation values
+to ensure accuracy of measurements.  On one common module, the AHT21 IC is on
+board for this purpose.
+#### Compensation updates via callback
+The best method is to set a lambda that functions as
+a callback.  This updates the temperature/humidity values from the supplied
+Lambdas prior to the air quality read, if the last temperature/humidity update
+is over 30 seconds old.
+```toit
+// I2C setup omitted - see examples folder.
+
+ens160-driver.set-compensation-temp-callback :: aht21-driver.read-temperature
+ens160-driver.set-compensation-humidity-callback :: aht21-driver.read-humidity
+
+// Additionally, the 30 second age can be shortened or lengthened.
+// To set to 20 seconds instead of the default 30 seconds:
+ens160-driver.set-callback-ttl (Duration --s=20)
+```
+This can be easily changed to use the driver read functions from any temperature
+or humidity sensor by supplying its functions here.  This is efficient in that
+if no reads are performed to the ENS160 device, the temperature/humidity sensor
+is not queried and the values not updated.
+
+#### Manual compensation updates
+The compensation values can be set directly using the following:
+```toit
+// I2C setup omitted
+ens160-driver.set-compensation-temp bme280-driver.read-temperature
+ens160-driver.set-compensation-humidity bme280-driver.read-humidity
+```
+These may get stale with continued operation, and therefore should be updated at
+an appropriate interval by the user.  If these values are not set, the datasheet
+suggests that standard reference conditions are used - 25°c/50% RH.
 
 ### Raw resistance values (for single gas calibration)
 An example as shown below.  The Datasheet shows that the ENS160 exposes two
 registers, whereas the ENS161 has just one.  (The error case of reading the
 additional ENS160 sensor #1 with the ENS161 is logged, but not guarded against.)
-See the [`read-raw.toit`](./examples/read-raw.toit) example.
+See the [`read-raw-i2c.toit`](./examples/read-raw-i2c.toit) example.
 
 ## Links
 - [ENS160 Datasheet](https://www.sciosense.com/wp-content/uploads/2023/12/ENS160-Datasheet.pdf)
@@ -117,22 +172,22 @@ See the [`read-raw.toit`](./examples/read-raw.toit) example.
 
 ## Issues
 If there are any issues with this code, changes, or any other kind of feedback,
-please [raise an issue](./issues). Feedback is welcome and appreciated!  There
-are evidently many cheap clones of this device floating about, with varying
-results.  Links to interesting articles on this:
-- [help is my ens160_aht21 board broken](https://www.reddit.com/r/Esphome/comments/1h9hk4j/help_is_my_ens160_aht21_board_broken/)
-- 
+please [raise an issue](./issues). Feedback is welcome and appreciated!
+
+Note: There are evidently many cheap clones of this device floating about, with
+varying levels of success.  If the board is misbehaving, this
+[article](https://www.reddit.com/r/Esphome/comments/1h9hk4j/help_is_my_ens160_aht21_board_broken/) may be interesting.
 
 ## Disclaimer
 - This driver has been written and tested with DFRobot module pictured.
 - The ENS161 has not been fully tested, but given the register map and details
-  in its datasheet, operation is fully expected.  Please test and advise!
+  in its datasheet, full operation is expected.  Please test and advise!
 - All trademarks belong to their respective owners.
 - No warranties for this work, express or implied.
 
 ## Credits
-- AI has been used for reviews, analysing & compiling data/results, and
-  assisting with ensuring accuracy.
+- AI has been used for reviews, bugfixing, analysing & compiling data/results, and
+  ensuring accuracy.
 - [Florian](https://github.com/floitsch) for the tireless help and encouragement
 - The wider Toit developer team (past and present) for a truly excellent product
 
@@ -145,3 +200,4 @@ One would assume you are here because you know what Toit is.  If you dont:
 > ESP32. [[link](https://toitlang.org/)]
 - [Review on Soracom](https://soracom.io/blog/internet-of-microcontrollers-made-easy-with-toit-x-soracom/)
 - [Review on eeJournal](https://www.eejournal.com/article/its-time-to-get-toit)
+- [Wikipedia](https://en.wikipedia.org/wiki/Toit)
