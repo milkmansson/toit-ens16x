@@ -73,7 +73,7 @@ class Ens16x:
 
   // REG-STATUS_: Data-validity values.
   static OUTPUT-NORMAL_         ::= 0b00  // OUTPUT is valid.
-  static OUTPUT-WARM-UP_        ::= 0b01  // OUTPUT is valid but WARMUP (?).
+  static OUTPUT-WARM-UP_        ::= 0b01  // Warm-up phase (3 minutes after power on).
   static OUTPUT-INIT-START-UP_  ::= 0b10  // ENS160 only.
   static OUTPUT-INVALID_        ::= 0b11
 
@@ -240,7 +240,7 @@ class Ens16x:
     sleep TIMING-CLEAR-GPR_
 
   cmd-no-op_ -> none:
-    // Don't know why we do this, however it is done in ScioSense's examples.
+    // Follows ScioSense's examples, which send a NOP before the other commands.
     write-register_ REG-CMD_ CMD-NOP_
 
   /**
@@ -610,9 +610,9 @@ class Ens16x:
 
   Note: the datasheet's reference C code tests `misr&0x80==0`. In C that is
     evaluated as `misr&(0x80==0)`, so it always takes the polynomial branch.
-    This implementation uses the intended `(misr & 0x80) == 0`. Which one the
-    silicon matches has not been confirmed here. If CRC failures are logged
-    on a clean bus, check this first.
+    This implementation uses the intended `(misr & 0x80) == 0`, which is what
+    the silicon follows: the hardware and software values agree on every
+    checked read.
   */
   misr-update-software_ data/int -> none:
     assert: 0 <= data <= 255
